@@ -182,7 +182,7 @@ struct PlayerView: View {
 
     private var bottomScrubber: some View {
         HStack(spacing: 10) {
-            Text(Self.timeLabel(currentTime))
+            Text(TimeFormatting.clock(currentTime))
                 .font(.caption.monospacedDigit())
                 .foregroundStyle(.white)
             Slider(
@@ -200,7 +200,7 @@ struct PlayerView: View {
                 }
             )
             .tint(.orange)
-            Text(Self.timeLabel(duration))
+            Text(TimeFormatting.clock(duration))
                 .font(.caption.monospacedDigit())
                 .foregroundStyle(.white.opacity(0.7))
         }
@@ -345,14 +345,5 @@ struct PlayerView: View {
         guard !request.isLive, !isScrubbing else { return }
         if let d = coordinator.durationSeconds { duration = d }
         if let t = coordinator.currentTimeSeconds { currentTime = t }
-    }
-
-    private static func timeLabel(_ seconds: Double) -> String {
-        guard seconds.isFinite, seconds >= 0 else { return "--:--" }
-        let total = Int(seconds)
-        let h = total / 3600, m = (total % 3600) / 60, s = total % 60
-        return h > 0
-            ? String(format: "%d:%02d:%02d", h, m, s)
-            : String(format: "%02d:%02d", m, s)
     }
 }

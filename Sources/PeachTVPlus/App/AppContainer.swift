@@ -80,13 +80,16 @@ final class AppContainer: ObservableObject {
     /// délègue au repository (qui purge le cache catalogue + le Keychain ; dernière liste →
     /// tout effacé, loi 25).
     func removePlaylist(_ id: String) {
+        // `manager.remove` fait annulation + suppression du FICHIER + suppression de la ligne,
+        // le tout sur sa file. On NE purge PAS la table en parallèle ici : cela supprimerait la
+        // ligne avant que l'op asynchrone n'ait lu le chemin local → fichier orphelin sur disque.
         let keys = ((try? downloadStore.all()) ?? [])
             .filter { $0.playlistId == id }
             .map(\.contentKey)
         for key in keys { downloadManager.remove(key) }
-        try? downloadStore.purgePlaylist(id)
 
         repository.removePlaylist(id)
+        // Dernière liste retirée : filet de sécurité (loi 25) si des lignes subsistaient.
         if repository.playlists.isEmpty { try? downloadStore.clearAll() }
         refreshVault()
     }
