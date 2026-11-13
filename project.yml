@@ -81,6 +81,10 @@ targets:
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.peachtvplus.app.tests
+        # XcodeGen ne génère pas d'Info.plist pour une cible de tests sans bloc
+        # `info:`. Sans lui, xcodebuild échoue à la signature (« does not have an
+        # Info.plist file ») → exit 65. On laisse Xcode en générer un.
+        GENERATE_INFOPLIST_FILE: YES
 
 schemes:
   PeachTVPlus:
