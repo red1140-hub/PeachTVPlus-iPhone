@@ -358,9 +358,13 @@ Téléchargement (parallélisables) → UI → QA/TestFlight.**
   (URLSession async), `XtreamMapping` (EPG Base64), `XtreamRepository` (login +
   **multi-listes** en mémoire + epoch + catalogue), `RedactingLogger`, + 6 suites de tests
   XCTest (mock `URLProtocol`). *(fait — 2026-11-12 ; à valider par la CI macos-14)*
-- [ ] **M2** — Stockage GRDB (schéma + DAO + FTS + pagination + isolation `playlistId`) +
-  Sécurité (**Keychain** → `KeychainPlaylistStore` remplace le store mémoire M1 ; redaction
-  déjà faite ; consentement HTTP par serveur ; exclusion backup). Specs : `docs/security.md`.
+- [x] **M2** — Stockage GRDB (`AppDatabase` migrator additif, records mappant Room, `CatalogStore` :
+  upsert par lots, lectures paginées, recherche **FTS5**, favoris/masquées **scopés `playlistId`**,
+  `clearCatalog`/`purgePlaylist`/`clearAll`) + Sécurité (`KeychainStore` + `KeychainPlaylistStore`
+  remplaçant le store mémoire M1, `CleartextConsent` par serveur, `URLGuard`, exclusion backup) ;
+  repository câblé (vidage cache à la bascule, purge au retrait, effacement total loi 25) ;
+  tests XCTest (cache mémoire, Keychain, gardes). GRDB = 1re dépendance SPM.
+  *(fait — 2026-11-12 ; à valider par la CI macos-14)*
 - [ ] **M3** — Lecture : `VideoEngine` (AVPlayer+VLCKit), résilience, écrans lecteur Live/VOD,
   EPG, catch-up, gestes.
 - [ ] **M4** — Téléchargement hors-ligne ⭐ : file background, reprise, Wi-Fi only, espace,

@@ -21,11 +21,18 @@ settings:
 
 # Dépendances SPM réintroduites à leur jalon (chacune validée par la CI à ce
 # moment-là, puisqu'on ne compile pas sous Windows) :
-#   M2 — GRDB.swift (cache SQLite + FTS5)
+#   M2 — GRDB.swift (cache SQLite + FTS5)   ← ACTIVÉE à ce jalon
 #   M3 — MobileVLCKit (lecture MPEG-TS/HEVC/AC3) + Nuke/NukeUI (images)
 #   M6 — swift-snapshot-testing (tests visuels)
-# Voir docs/PORT-SPEC.md §2. Le build M0/M1 reste SANS dépendance externe pour
-# obtenir un premier CI vert fiable.
+# Voir docs/PORT-SPEC.md §2. Le build M0/M1 restait SANS dépendance externe pour
+# obtenir un premier CI vert fiable ; M2 introduit la 1re dépendance (GRDB).
+
+packages:
+  GRDB:
+    url: https://github.com/groue/GRDB.swift
+    # upToNextMajor : >= 6.x, < 7.0 (GRDB 7 vise Swift 6 / concurrence stricte —
+    # on reste sur la 6.x stable tant qu'aucun Mac ne permet d'itérer le build).
+    from: "6.0.0"
 
 targets:
   PeachTVPlus:
@@ -33,6 +40,8 @@ targets:
     platform: iOS
     sources:
       - path: Sources/PeachTVPlus
+    dependencies:
+      - package: GRDB
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.peachtvplus.app

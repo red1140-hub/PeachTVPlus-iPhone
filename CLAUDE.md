@@ -170,7 +170,18 @@ fichiers. Détail + dossiers dans `docs/PORT-SPEC.md §10`.
 M0 scaffold (CI vert à vide) · M1 réseau+modèles · M2 stockage GRDB + sécurité ·
 M3 lecture (VideoEngine, EPG, catch-up) · M4 téléchargement hors-ligne ⭐ · M5 UI complète
 (responsive iPad) · M6 QA (tests+snapshots+règles CI) · M7 signature + **TestFlight**.
-Détail : `docs/PORT-SPEC.md §11`. **Actuel : M0.**
+Détail : `docs/PORT-SPEC.md §11`. **Actuel : M2 fait (M0+M1+M2 à valider par la CI). Prochain : M3.**
+
+- **Stockage (M2)** : `Storage/AppDatabase` (GRDB, `DatabaseMigrator` **additif** — jamais de
+  drop&recreate), `Storage/CatalogStore` (DAO : upsert par lots, lectures paginées, recherche
+  **FTS5** par titre, favoris/masquées **scopés `playlistId`**, `clearCatalog` vs `clearAll`).
+  Base `Application Support/catalogue.sqlite`, **exclue du backup iCloud**. GRDB = 1re dépendance
+  SPM (via `project.yml`). API synchrone pour l'instant → **M5** la déportera hors du main actor.
+- **Sécurité (M2)** : `Security/KeychainStore` (générique, `ThisDeviceOnly`, non iCloud) +
+  `KeychainPlaylistStore` (blob JSON chiffré, remplace le store mémoire M1 ; n'efface QUE sur
+  échec **permanent**) ; `CleartextConsent` (HTTP autorisé seulement après consentement **par
+  serveur**) ; `URLGuard` (allowlist `http/https`) ; `URL.excludeFromBackup()`. La réinjection
+  `__cred__` + garde-fou d'hôte est déjà dans `XtreamURLFactory` (M1) — pas de doublon.
 
 ## Dépendances humaines (utilisateur)
 

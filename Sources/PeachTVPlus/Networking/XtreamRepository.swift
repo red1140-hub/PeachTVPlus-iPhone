@@ -1,10 +1,18 @@
 import Foundation
 
-/// Persistance de l'état multi-listes. M1 = en mémoire ; M2 fournira une implémentation
-/// adossée au Keychain (chiffré). Le repository ne connaît que ce protocole.
+/// Persistance de l'état multi-listes. Le repository ne connaît que ce protocole.
+/// Implémentation par défaut (M2) : `KeychainPlaylistStore` (chiffré). `InMemoryPlaylistStore`
+/// reste utilisé par les tests.
 protocol PlaylistStoring: AnyObject {
     func load() -> PlaylistState
     func save(_ state: PlaylistState)
+    /// Efface **réellement** le store (déconnexion / dernière liste retirée, loi 25).
+    func clear()
+}
+
+extension PlaylistStoring {
+    /// Par défaut : écrire l'état vide. `KeychainPlaylistStore` retire réellement le blob.
+    func clear() { save(.empty) }
 }
 
 final class InMemoryPlaylistStore: PlaylistStoring {
@@ -16,19 +24,25 @@ final class InMemoryPlaylistStore: PlaylistStoring {
 
 /// Point d'entrée data unique (login + catalogue + gestion des listes).
 ///
-/// M1 : réseau + mapping + **multi-listes** (store mémoire, `playlistEpoch`). Le cache
-/// catalogue (GRDB) et l'isolation `playlistId` des favoris/masquées arrivent en M2 ;
-/// `resetForSourceChange()` y videra le cache en gardant favoris/masquées.
+/// Réseau + mapping + **multi-listes** (store Keychain par défaut, `playlistEpoch`) + hooks
+/// de **cache catalogue** (M2, GRDB) : `resetForSourceChange()` vide le cache en gardant
+/// favoris/masquées (scopés `playlistId`) ; retirer une liste purge ses favoris/masquées ;
+/// retirer la dernière efface tout (loi 25). `catalog` est optionnel pour que les tests
+/// réseau/listes tournent sans base.
 @MainActor
 final class XtreamRepository {
     private let session: URLSession
     private let store: PlaylistStoring
+    private let catalog: CatalogStore?
     private(set) var state: PlaylistState
     private(set) var playlistEpoch: Int = 0
 
-    init(session: URLSession = .shared, store: PlaylistStoring = InMemoryPlaylistStore()) {
+    init(session: URLSession = .shared,
+         store: PlaylistStoring = KeychainPlaylistStore(),
+         catalog: CatalogStore? = nil) {
         self.session = session
         self.store = store
+        self.catalog = catalog
         self.state = store.load()
     }
 
@@ -64,15 +78,28 @@ final class XtreamRepository {
             state.activeId = state.items.first?.id
             resetForSourceChange()
         }
-        store.save(state)
-        // M2 : purger les favoris + chaînes masquées scopés `playlistId == id`.
+        // Retrait d'une liste → purge SES favoris + chaînes masquées (scopés `playlistId`).
+        do { try catalog?.purgePlaylist(id) }
+        catch { RedactingLogger.error("Purge de la liste échouée — \(error)") }
+
+        if state.items.isEmpty {
+            // Dernière liste retirée = tout effacer (loi 25) : base + Keychain.
+            do { try catalog?.clearAll() }
+            catch { RedactingLogger.error("Effacement total du cache échoué — \(error)") }
+            store.clear()
+        } else {
+            store.save(state)
+        }
     }
 
     /// Changement de source active → le cache catalogue devient invalide. On incrémente
     /// l'epoch ; tout `refresh*` en vol capture l'epoch et **abandonne** son écriture si
-    /// l'epoch a changé entre-temps (anti-données-fantômes). Favoris/masquées conservés.
+    /// l'epoch a changé entre-temps (anti-données-fantômes). On **vide le cache catalogue**
+    /// (categories/channels/movies/series/positions/cast) mais **conserve** favoris/masquées.
     func resetForSourceChange() {
         playlistEpoch += 1
+        do { try catalog?.clearCatalog() }
+        catch { RedactingLogger.error("Vidage du cache catalogue échoué — \(error)") }
     }
 
     // MARK: - Login
