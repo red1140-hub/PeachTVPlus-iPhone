@@ -45,8 +45,10 @@ final class FavoritesViewModel: ObservableObject {
 struct FavoritesView: View {
     @StateObject private var vm: FavoritesViewModel
     @State private var presentation: PlayerPresentation?
+    private let container: AppContainer
 
     init(container: AppContainer) {
+        self.container = container
         _vm = StateObject(wrappedValue: FavoritesViewModel(container: container))
     }
 
@@ -67,6 +69,12 @@ struct FavoritesView: View {
                 PlayerView(request: p.request, onClose: { presentation = nil })
             }
         }
+    }
+
+    /// Série minimale reconstituée depuis un favori (seul `id` est requis pour charger le détail).
+    private static func series(from fav: FavoriteRecord) -> Series {
+        Series(id: fav.itemId, name: fav.name ?? fav.itemId,
+               posterURL: fav.posterURL, categoryId: nil, rating: nil)
     }
 
     private var list: some View {
@@ -102,12 +110,16 @@ struct FavoritesView: View {
             if !vm.seriesFavorites.isEmpty {
                 Section("Séries") {
                     ForEach(vm.seriesFavorites, id: \.itemId) { fav in
-                        Text(fav.name ?? fav.itemId)
-                            .swipeActions {
-                                Button("Retirer", role: .destructive) {
-                                    vm.remove(contentType: .series, itemId: fav.itemId)
-                                }
+                        NavigationLink {
+                            SeriesDetailView(series: Self.series(from: fav), container: container)
+                        } label: {
+                            Text(fav.name ?? fav.itemId)
+                        }
+                        .swipeActions {
+                            Button("Retirer", role: .destructive) {
+                                vm.remove(contentType: .series, itemId: fav.itemId)
                             }
+                        }
                     }
                 }
             }

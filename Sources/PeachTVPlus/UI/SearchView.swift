@@ -36,8 +36,10 @@ final class SearchViewModel: ObservableObject {
 struct SearchView: View {
     @StateObject private var vm: SearchViewModel
     @State private var presentation: PlayerPresentation?
+    private let container: AppContainer
 
     init(container: AppContainer) {
+        self.container = container
         _vm = StateObject(wrappedValue: SearchViewModel(container: container))
     }
 
@@ -86,9 +88,11 @@ struct SearchView: View {
             if !vm.seriesResults.isEmpty {
                 Section("Séries") {
                     ForEach(vm.seriesResults) { series in
-                        // Le détail (saisons/épisodes) + lecture d'épisode arrivent avec l'écran
-                        // détail (fin M5 / M6) ; ici on liste le résultat.
-                        Text(series.name).foregroundStyle(.primary)
+                        NavigationLink {
+                            SeriesDetailView(series: series, container: container)
+                        } label: {
+                            Text(series.name)
+                        }
                     }
                 }
             }
