@@ -1,0 +1,54 @@
+name: CI
+
+# Ce workflow suppose que le DOSSIER PeachTV+_iPhone est poussé comme son PROPRE dépôt
+# GitHub (racine du dépôt = ce dossier). Pas de préfixe working-directory.
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  security-rules:
+    # Règles de sécurité "fail the build" (voir docs/security.md).
+    # Tournent sur Linux, rapides, AVANT de réserver un runner macOS (coûteux).
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Interdire TrustAll / vérification TLS désactivée
+        run: |
+          if grep -RInE '\.useCredential.*serverTrust|allowsAnyHTTPSCertificate|_allowsAnyHTTPSCertificate' Sources/ ; then
+            echo "::error::Vérification TLS potentiellement désactivée (TrustAll interdit)."; exit 1
+          fi
+      - name: Interdire les URLs/secrets bruts vers un logger
+        run: |
+          if grep -RInE 'print\(.*(username=|password=|/live/|/movie/|/series/|/timeshift/|player_api\.php)' Sources/ ; then
+            echo "::error::URL/secret potentiellement logué sans redaction."; exit 1
+          fi
+      - name: Interdire le stockage d'identifiants en clair
+        run: |
+          if grep -RInE 'UserDefaults.*(password|username|credential)' Sources/ ; then
+            echo "::error::Identifiants potentiellement stockés dans UserDefaults (utiliser le Keychain)."; exit 1
+          fi
+
+  build-test:
+    runs-on: macos-14
+    needs: security-rules
+    steps:
+      - uses: actions/checkout@v4
+      - name: Sélectionner Xcode
+        run: sudo xcode-select -s /Applications/Xcode_15.4.app
+      - name: Installer XcodeGen
+        run: brew install xcodegen
+      - name: Générer le projet
+        run: xcodegen generate
+      - name: Résoudre les dépendances SPM
+        run: xcodebuild -resolvePackageDependencies -scheme PeachTVPlus
+      - name: Build + tests (simulateur)
+        run: |
+          set -o pipefail
+          xcodebuild \
+            -scheme PeachTVPlus \
+            -destination 'platform=iOS Simulator,name=iPhone 15,OS=latest' \
+            -enableCodeCoverage YES \
+            clean build test

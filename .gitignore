@@ -1,0 +1,31 @@
+# Xcode / projet GÉNÉRÉ (jamais versionné — produit par XcodeGen depuis project.yml)
+*.xcodeproj
+*.xcworkspace
+!default.xcworkspace
+xcuserdata/
+DerivedData/
+build/
+.build/
+
+# SPM
+.swiftpm/
+Package.resolved
+
+# macOS
+.DS_Store
+
+# Signature / secrets (jamais versionnés)
+*.mobileprovision
+*.p12
+*.cer
+*.certSigningRequest
+fastlane/.env
+fastlane/report.xml
+fastlane/Preview.html
+fastlane/screenshots
+fastlane/test_output
+AuthKey_*.p8
+ExportOptions.plist
+
+# Divers
+*.log

@@ -1,0 +1,43 @@
+# Matchfile — PeachTV+ iOS (Fastlane match) — OPTIONNEL
+# ------------------------------------------------------------------------------
+# `match` stocke les certificats + profils de provisioning CHIFFRÉS dans un
+# dépôt Git séparé et PRIVÉ, pour signer de façon reproductible sans jamais
+# toucher un Mac et sans trimballer de .p12 à la main.
+#
+# ⚠️ C'est une OPTION (voir docs/devops-testflight.md §2, « Option B »). Pour un
+# usage perso solo, la « signature automatique par clé d'API » (Option A,
+# -allowProvisioningUpdates) suffit et évite ce dépôt supplémentaire. On garde ce
+# fichier commenté/prêt pour le jour où l'app vise l'App Store public ou plusieurs
+# machines de build.
+#
+# Secrets attendus en CI (jamais versionnés) :
+#   MATCH_GIT_URL      → URL du dépôt privé des certificats (ex. git@github.com:toi/certs.git)
+#   MATCH_PASSWORD     → phrase secrète de (dé)chiffrement du coffre match
+#   MATCH_GIT_BASIC_AUTHORIZATION → token base64 "user:PAT" pour cloner le dépôt certs en HTTPS
+# ------------------------------------------------------------------------------
+
+# Dépôt Git PRIVÉ qui héberge les certs/profils chiffrés (à créer une seule fois).
+git_url(ENV["MATCH_GIT_URL"]) if ENV["MATCH_GIT_URL"]
+
+# Type de stockage : un simple dépôt git (le plus courant).
+storage_mode("git")
+
+# Type de signature : "appstore" couvre la distribution TestFlight ET App Store.
+# (Pas besoin de "development" pour une CI qui ne fait qu'archiver/téléverser.)
+type("appstore")
+
+# App(s) concernée(s).
+app_identifier(["com.peachtvplus.app"])
+
+# Team ID (même source que l'Appfile).
+team_id(ENV["APPLE_TEAM_ID"]) if ENV["APPLE_TEAM_ID"]
+
+# En CI : lecture seule (ne jamais RÉGÉNÉRER de certs depuis un runner).
+# La première création des certs/profils se fait UNE fois depuis une machine de
+# confiance (ou via `fastlane match appstore` lancé manuellement), puis la CI se
+# contente de les récupérer en lecture seule :
+readonly(true)
+
+# Clé d'API App Store Connect : évite tout mot de passe Apple ID / 2FA.
+# (match sait consommer la clé d'API ; en pratique le Fastfile la charge via
+#  app_store_connect_api_key avant d'appeler match.)

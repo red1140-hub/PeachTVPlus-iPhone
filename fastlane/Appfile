@@ -1,0 +1,25 @@
+# Appfile — PeachTV+ iOS (Fastlane)
+# ------------------------------------------------------------------------------
+# Identité du projet pour Fastlane. AUCUN secret ici : uniquement des
+# identifiants publics (bundle id, Apple ID de compte). Fichier versionnable.
+#
+# L'authentification App Store Connect NE passe PAS par un mot de passe Apple ID
+# (2FA ingérable en CI) mais par une CLÉ D'API App Store Connect (.p8 / Key ID /
+# Issuer ID) fournie à l'exécution — voir docs/devops-testflight.md §2.
+# ------------------------------------------------------------------------------
+
+# Bundle identifier de l'app (doit correspondre à project.yml :
+# PRODUCT_BUNDLE_IDENTIFIER = com.peachtvplus.app).
+app_identifier("com.peachtvplus.app")
+
+# Apple ID du compte Apple Developer (utile seulement pour certaines commandes
+# interactives ; en CI on utilise la clé d'API, pas ce champ). Décommenter et
+# renseigner au besoin — ce n'est PAS un secret, juste un courriel de compte.
+# apple_id(ENV["FASTLANE_APPLE_ID"] || "ton-apple-id@example.com")
+
+# Team ID (10 caractères, visible dans App Store Connect > Membership, ou dans
+# developer.apple.com). Fourni par le secret GitHub APPLE_TEAM_ID en CI.
+team_id(ENV["APPLE_TEAM_ID"]) if ENV["APPLE_TEAM_ID"]
+
+# itc_team_id("...") # rarement nécessaire : seulement si le compte appartient à
+# plusieurs équipes App Store Connect avec le même Team ID.

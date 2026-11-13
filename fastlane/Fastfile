@@ -1,0 +1,127 @@
+# Fastfile — PeachTV+ iOS
+# ==============================================================================
+# EXEMPLE commenté, prêt à adapter. Tourne UNIQUEMENT sur le Mac cloud de la CI
+# (GitHub Actions macos-14) — jamais sous Windows, jamais dans la session Claude.
+#
+# Pré-requis assurés par le workflow AVANT d'appeler ces lanes :
+#   - Xcode sélectionné (xcode-select) ;
+#   - XcodeGen installé et `xcodegen generate` exécuté (le .xcodeproj n'est PAS
+#     versionné : il faut le (re)générer à chaque run) ;
+#   - dépendances SPM résolues ;
+#   - variables d'environnement de signature/version exportées (voir §2/§5 de
+#     docs/devops-testflight.md).
+#
+# Nom de scheme/cible Xcode : « PeachTVPlus » (sanitisé, sans « + »).
+# Bundle id : com.peachtvplus.app. Nom affiché : « PeachTV+ ».
+# ==============================================================================
+
+default_platform(:ios)
+
+# Constantes projet (adapter si le nom de scheme change).
+SCHEME     = "PeachTVPlus"
+PROJECT    = "PeachTVPlus.xcodeproj" # généré par XcodeGen (non versionné)
+BUNDLE_ID  = "com.peachtvplus.app"
+
+platform :ios do
+  # --------------------------------------------------------------------------
+  # Charge la clé d'API App Store Connect depuis l'environnement (secrets CI).
+  # Remplace le mot de passe Apple ID + 2FA : indispensable sans Mac/interaction.
+  #   ASC_KEY_ID      = Key ID de la clé (ex. "ABC123DEF4")
+  #   ASC_ISSUER_ID   = Issuer ID (UUID du compte, App Store Connect > Users and Access > Integrations)
+  #   ASC_KEY_P8_PATH = chemin du fichier .p8 écrit par le workflow (gitignoré : AuthKey_*.p8)
+  # --------------------------------------------------------------------------
+  def load_asc_api_key
+    app_store_connect_api_key(
+      key_id: ENV["ASC_KEY_ID"],
+      issuer_id: ENV["ASC_ISSUER_ID"],
+      key_filepath: ENV["ASC_KEY_P8_PATH"],
+      duration: 1200,          # jeton valable 20 min (max 1200 s)
+      in_house: false          # pas un compte Enterprise
+    )
+  end
+
+  # --------------------------------------------------------------------------
+  # LANE : tests — build + tests unitaires/snapshots sur simulateur.
+  # Doublon pratique de la CI build-test ; permet `fastlane tests` en local Mac.
+  # --------------------------------------------------------------------------
+  desc "Build + tests sur simulateur iPhone"
+  lane :tests do
+    run_tests(
+      project: PROJECT,
+      scheme: SCHEME,
+      devices: ["iPhone 15"],
+      code_coverage: true,
+      clean: true
+    )
+  end
+
+  # --------------------------------------------------------------------------
+  # LANE : beta — archive signée + téléversement TestFlight.
+  # Déclenchée par le workflow release (sur tag v* ou workflow_dispatch).
+  #
+  # SIGNATURE — deux options (choisir UNE ; voir §2 de la doc) :
+  #   Option A (DÉFAUT ICI, perso solo) : signature AUTOMATIQUE par clé d'API.
+  #     gym/xcodebuild crée/renouvelle cert + profil via -allowProvisioningUpdates.
+  #     Rien à stocker : la clé d'API suffit. `get_certificates`/`match` inutiles.
+  #   Option B (match, App-Store-ready multi-machines) : décommenter le bloc match
+  #     et passer export_method/signing en manuel. Voir Matchfile.
+  # --------------------------------------------------------------------------
+  desc "Archive signée + envoi TestFlight"
+  lane :beta do
+    api_key = load_asc_api_key
+
+    # --- Option B (match) — décommenter pour signature par profils gérés -------
+    # match(
+    #   type: "appstore",
+    #   api_key: api_key,
+    #   readonly: true
+    # )
+    # ---------------------------------------------------------------------------
+
+    build_app(
+      project: PROJECT,
+      scheme: SCHEME,
+      configuration: "Release",
+      clean: true,
+      output_name: "PeachTVPlus.ipa",
+      export_method: "app-store",
+      # Signature automatique via la clé d'API (Option A) :
+      xcargs: "-allowProvisioningUpdates",
+      export_options: {
+        method: "app-store",
+        signingStyle: "automatic",
+        teamID: ENV["APPLE_TEAM_ID"],
+        # Laisse Xcode/App Store Connect gérer les profils :
+        destination: "export"
+      }
+    )
+
+    upload_to_testflight(
+      api_key: api_key,
+      ipa: "PeachTVPlus.ipa",
+      skip_waiting_for_build_processing: true, # ne bloque pas le runner ~10 min
+      skip_submission: true,                   # pas de soumission revue (TestFlight perso)
+      distribute_external: false,              # testeurs internes (toi) ; externe = revue bêta
+      changelog: ENV["TESTFLIGHT_CHANGELOG"] || "Build CI #{ENV['BUILD_NUMBER']}"
+    )
+  end
+
+  # --------------------------------------------------------------------------
+  # LANE : release_appstore — PLUS TARD, si passage App Store public.
+  # Téléverse + soumet pour revue (métadonnées/captures via deliver).
+  # Laissé en squelette : à activer au moment voulu.
+  # --------------------------------------------------------------------------
+  # desc "Soumission App Store (public — plus tard)"
+  # lane :release_appstore do
+  #   api_key = load_asc_api_key
+  #   build_app(project: PROJECT, scheme: SCHEME, export_method: "app-store",
+  #             xcargs: "-allowProvisioningUpdates")
+  #   upload_to_app_store(
+  #     api_key: api_key,
+  #     submit_for_review: true,
+  #     automatic_release: false,
+  #     force: true,                 # pas de confirmation HTML
+  #     precheck_include_in_app_purchases: false
+  #   )
+  # end
+end
