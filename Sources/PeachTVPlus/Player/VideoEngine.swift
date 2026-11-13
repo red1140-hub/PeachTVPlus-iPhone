@@ -1,4 +1,7 @@
 import Foundation
+#if canImport(UIKit)
+import UIKit
+#endif
 
 /// État de lecture observable, commun aux deux moteurs (AVPlayer, VLC).
 enum PlaybackState: Equatable {
@@ -34,4 +37,11 @@ protocol VideoEngine: AnyObject {
     /// Position / durée courantes (secondes) — `nil` si indisponible (Live sans fenêtre).
     var currentTimeSeconds: Double? { get }
     var durationSeconds: Double? { get }
+
+    #if canImport(UIKit)
+    /// Attache la surface de rendu du moteur à `view` (couche `AVPlayerLayer` pour AVPlayer,
+    /// `drawable` pour VLC). Appelé par le coordinateur avant `prepare` ; à la bascule de
+    /// moteur, l'ancienne surface est vidée puis le nouveau moteur s'y attache. Voir `PlaybackCoordinator`.
+    func attach(to view: UIView)
+    #endif
 }

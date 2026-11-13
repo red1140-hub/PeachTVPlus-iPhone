@@ -33,6 +33,14 @@ packages:
     # upToNextMajor : >= 6.x, < 7.0 (GRDB 7 vise Swift 6 / concurrence stricte —
     # on reste sur la 6.x stable tant qu'aucun Mac ne permet d'itérer le build).
     from: "6.0.0"
+  # M3b — VLCKit empaqueté en Swift Package (binaire xcframework). Lit le MPEG-TS brut,
+  # HEVC, AC3/DTS qu'AVPlayer refuse. Produit ET module = « VLCKitSPM » (import VLCKitSPM).
+  # Tag stable 3.6.0 = xcframework « all » (iOS device + simulateur). ⚠️ la présence de la
+  # tranche simulateur arm64 n'est validable que par la CI macOS → tout le code VLC est
+  # derrière `#if canImport(VLCKitSPM)` avec repli AVPlayer si le module manque.
+  VLCKitSPM:
+    url: https://github.com/tylerjonesio/vlckit-spm
+    from: "3.6.0"
 
 targets:
   PeachTVPlus:
@@ -42,6 +50,8 @@ targets:
       - path: Sources/PeachTVPlus
     dependencies:
       - package: GRDB
+      - package: VLCKitSPM
+        product: VLCKitSPM
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.peachtvplus.app
@@ -63,7 +73,7 @@ targets:
         UIBackgroundModes:
           - fetch
           - processing
-        # Lecture audio en arrière-plan ajoutée avec le lecteur (M3) : "audio".
+          - audio   # M3b — poursuite de la lecture audio écran verrouillé / autre app.
         # ATS : le trafic en clair n'est PAS autorisé par principe. Les serveurs
         # Xtream en HTTP sont inconnus au build (saisis à l'exécution) → on garde
         # NSAllowsArbitraryLoads=true UNIQUEMENT pour ça ; le blocage réel du clair

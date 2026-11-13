@@ -1,5 +1,15 @@
 import Foundation
 import AVFoundation
+#if canImport(UIKit)
+import UIKit
+
+/// Vue dont la couche racine **est** l'`AVPlayerLayer` : elle se redimensionne seule
+/// (rotation, Split View iPad, plein écran) sans qu'on gère de `frame` à la main.
+private final class AVPlayerLayerView: UIView {
+    override class var layerClass: AnyClass { AVPlayerLayer.self }
+    var playerLayer: AVPlayerLayer { layer as! AVPlayerLayer }
+}
+#endif
 
 /// Moteur natif (HLS `.m3u8` / mp4) : AirPlay, PiP et pistes audio/sous-titres « gratuits ».
 /// Le TS brut et HEVC/AC3 relèvent de `VLCPlayerEngine` (M3b) — ici on reste sur AVFoundation.
@@ -70,6 +80,22 @@ final class AVPlayerEngine: VideoEngine {
         guard let d = player.currentItem?.duration.seconds, d.isFinite, d > 0 else { return nil }
         return d
     }
+
+    #if canImport(UIKit)
+    func attach(to view: UIView) {
+        let layerView = AVPlayerLayerView()
+        layerView.playerLayer.player = player
+        layerView.playerLayer.videoGravity = .resizeAspect
+        layerView.translatesAutoresizingMaskIntoConstraints = false
+        view.addSubview(layerView)
+        NSLayoutConstraint.activate([
+            layerView.leadingAnchor.constraint(equalTo: view.leadingAnchor),
+            layerView.trailingAnchor.constraint(equalTo: view.trailingAnchor),
+            layerView.topAnchor.constraint(equalTo: view.topAnchor),
+            layerView.bottomAnchor.constraint(equalTo: view.bottomAnchor),
+        ])
+    }
+    #endif
 
     // MARK: - Observation
 
