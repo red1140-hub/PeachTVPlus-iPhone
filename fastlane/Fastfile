@@ -78,6 +78,18 @@ platform :ios do
     # )
     # ---------------------------------------------------------------------------
 
+    # Injection de version (M7) : XcodeGen ne sait pas écrire de valeur par défaut
+    # `${VAR:-x}` dans project.yml → on override MARKETING_VERSION / CURRENT_PROJECT_VERSION
+    # en RÉGLAGES DE BUILD à l'archivage (unicité du build number pour TestFlight). Absents
+    # en local → les valeurs fixes de project.yml (0.1.0 / 1) s'appliquent.
+    version_args = ["-allowProvisioningUpdates"]
+    unless (ENV["MARKETING_VERSION"] || "").empty?
+      version_args << "MARKETING_VERSION=#{ENV['MARKETING_VERSION']}"
+    end
+    unless (ENV["CURRENT_PROJECT_VERSION"] || "").empty?
+      version_args << "CURRENT_PROJECT_VERSION=#{ENV['CURRENT_PROJECT_VERSION']}"
+    end
+
     build_app(
       project: PROJECT,
       scheme: SCHEME,
@@ -85,8 +97,8 @@ platform :ios do
       clean: true,
       output_name: "PeachTVPlus.ipa",
       export_method: "app-store",
-      # Signature automatique via la clé d'API (Option A) :
-      xcargs: "-allowProvisioningUpdates",
+      # Signature automatique via la clé d'API (Option A) + injection de version :
+      xcargs: version_args.join(" "),
       export_options: {
         method: "app-store",
         signingStyle: "automatic",

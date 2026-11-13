@@ -80,6 +80,9 @@ targets:
         # sans consentement PAR SERVEUR est fait dans le code réseau (PORT-SPEC §5).
         NSAppTransportSecurity:
           NSAllowsArbitraryLoads: true
+        # M7 — conformité export : l'app n'utilise que du chiffrement standard (HTTPS/TLS,
+        # Keychain), exempté. Déclaré ici pour éviter la question à chaque build TestFlight.
+        ITSAppUsesNonExemptEncryption: false
 
   PeachTVPlusTests:
     type: bundle.unit-test

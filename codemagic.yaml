@@ -52,3 +52,72 @@ workflows:
             -destination "id=$udid" \
             -enableCodeCoverage YES \
             clean build test
+
+  # ============================================================================
+  # M7 — Release TestFlight. Déclenché UNIQUEMENT sur un tag `v*` (ex. v0.1.0).
+  # Ne tourne donc jamais sur les push de `main` (c'est build-test qui valide).
+  # Réutilise la lane `fastlane beta` (signature auto par clé d'API, Option A).
+  #
+  # Côté humain (une fois, dans l'UI Codemagic) : créer un GROUPE de variables
+  # « appstore_credentials » contenant :
+  #   ASC_KEY_ID       Key ID de la clé d'API App Store Connect
+  #   ASC_ISSUER_ID    Issuer ID du compte
+  #   ASC_KEY_P8_B64   contenu du .p8 encodé base64 (une ligne) — coché « secure »
+  #   APPLE_TEAM_ID    Team ID (10 car.)
+  # Voir docs/devops-testflight.md §2 et §9.
+  # ============================================================================
+  ios-testflight:
+    name: PeachTV+ iOS — archive & TestFlight
+    instance_type: mac_mini_m2
+    max_build_duration: 60
+    environment:
+      xcode: latest
+      groups:
+        - appstore_credentials
+    triggering:
+      events:
+        - tag
+      tag_patterns:
+        - pattern: 'v*'
+          include: true
+    scripts:
+      - name: Règles de sécurité (grep — fail the build)
+        script: |
+          set -euo pipefail
+          SRC=Sources
+          if grep -RInE '\.useCredential.*serverTrust|allowsAnyHTTPSCertificate|_allowsAnyHTTPSCertificate' "$SRC"; then
+            echo "❌ TrustAll / vérification TLS désactivée"; exit 1; fi
+          if grep -RInE 'print\(.*(username=|password=|/live/|/movie/|/series/|/timeshift/|player_api\.php)' "$SRC"; then
+            echo "❌ URL/secret potentiellement logué sans redaction"; exit 1; fi
+          if grep -RInE 'UserDefaults.*(password|username|credential)' "$SRC"; then
+            echo "❌ Identifiants potentiellement en UserDefaults"; exit 1; fi
+          echo "✅ Règles de sécurité OK"
+      - name: Installer XcodeGen
+        script: brew install xcodegen
+      - name: Préparer la clé d'API App Store Connect (.p8)
+        script: |
+          set -euo pipefail
+          # Reconstitue le .p8 depuis le secret base64 (jamais versionné).
+          echo "$ASC_KEY_P8_B64" | base64 --decode > "$CM_BUILD_DIR/AuthKey.p8"
+          echo "ASC_KEY_P8_PATH=$CM_BUILD_DIR/AuthKey.p8" >> "$CM_ENV"
+      - name: Déterminer les versions
+        script: |
+          set -euo pipefail
+          MV="${CM_TAG#v}"            # v0.1.0 → 0.1.0
+          [ -z "$MV" ] && MV="0.1.0"
+          echo "MARKETING_VERSION=$MV" >> "$CM_ENV"
+          echo "CURRENT_PROJECT_VERSION=$PROJECT_BUILD_NUMBER" >> "$CM_ENV"  # strictement croissant
+          echo "TESTFLIGHT_CHANGELOG=TestFlight $CM_TAG (build $PROJECT_BUILD_NUMBER)" >> "$CM_ENV"
+      - name: Générer le projet (XcodeGen)
+        script: DEVELOPMENT_TEAM="$APPLE_TEAM_ID" xcodegen generate
+      - name: Résoudre les dépendances SPM
+        script: xcodebuild -resolvePackageDependencies -scheme PeachTVPlus
+      - name: Archive signée + envoi TestFlight (fastlane beta)
+        script: |
+          set -euo pipefail
+          # Le Fastfile lit ASC_* + APPLE_TEAM_ID + MARKETING_VERSION/CURRENT_PROJECT_VERSION
+          # depuis l'environnement (déjà fournis par le groupe + $CM_ENV).
+          fastlane beta
+    artifacts:
+      - "*.ipa"
+      - build/**/*.ipa

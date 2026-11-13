@@ -471,3 +471,67 @@ L'archi est tenue prête ; voici ce qui s'ajouterait pour une **publication App 
 *Document maintenu par le rôle QA / CI / Déploiement (voir `PORT-SPEC §10`). Toute décision de
 signature / release est consignée ici. Rien ne compile sous Windows : tout est validé par la CI
 macOS.*
+
+---
+
+## 9. ⚠️ MISE À JOUR (M7, 2026-11-13) — release réelle via **Codemagic**, pas GitHub Actions
+
+**Correction importante** : les §1–§3 supposent des runners **GitHub Actions `macos-14`**. En
+pratique, **GitHub n'alloue AUCUN runner macOS hébergé à ce compte** (file d'attente indéfinie,
+constaté 2026-11). Tout le build macOS — **y compris la release TestFlight** — tourne donc sur
+**Codemagic** (runners Apple Silicon, tier gratuit). Le `release.yml` GitHub du §3 **ne tournerait
+jamais** : on ne l'ajoute pas. `.github/workflows/ci.yml` ne garde que les règles de sécurité (Linux).
+
+### 9.1 Ce qui est déjà en place (prépa M7 livrée)
+
+- **`codemagic.yaml` → workflow `ios-testflight`** : déclenché **sur tag `v*`**, re-joue les règles
+  de sécurité, `xcodegen generate`, résout SPM, puis lance **`fastlane beta`** (archive signée par
+  clé d'API + envoi TestFlight). Le workflow `build-test` (push/PR) reste la porte de qualité.
+- **`fastlane/Fastfile`** : lane `beta` inchangée dans l'esprit (Option A, clé d'API) + **injection
+  de version** résolue — `MARKETING_VERSION` / `CURRENT_PROJECT_VERSION` passés en **réglages de
+  build** (`xcargs`) depuis l'environnement, car **XcodeGen ne sait pas écrire `${VAR:-défaut}`**
+  dans `project.yml` (c'est pourquoi le §5 n'est PAS appliqué tel quel ; l'override au build le
+  remplace).
+- **Manifeste de confidentialité** `Sources/PeachTVPlus/PrivacyInfo.xcprivacy` (aucun tracking,
+  aucune collecte ; API à raison requise : `UserDefaults` CA92.1, Espace disque E174.1) + **conformité
+  export** `ITSAppUsesNonExemptEncryption = false` dans `project.yml`. Requis par Apple à l'upload.
+- **Brouillons** : `docs/privacy-policy.md` (à héberger → URL dans la fiche) et
+  `docs/app-store-listing.md` (fiche + notes de revue IPTV).
+
+### 9.2 Secrets côté Codemagic (au lieu des secrets GitHub du §2.3)
+
+Dans l'UI Codemagic → **Environment variables** → groupe **`appstore_credentials`** (tout en
+« secure ») :
+
+| Variable | Contenu |
+|---|---|
+| `ASC_KEY_ID` | Key ID de la clé d'API App Store Connect |
+| `ASC_ISSUER_ID` | Issuer ID du compte |
+| `ASC_KEY_P8_B64` | contenu du `.p8` **encodé base64** (une ligne — voir §2.3 pour l'encodage) |
+| `APPLE_TEAM_ID` | Team ID (10 car.) |
+
+Le workflow décode `ASC_KEY_P8_B64` en un fichier `.p8` sur le runner (jamais versionné) et
+expose `ASC_KEY_P8_PATH` au `Fastfile`.
+
+### 9.3 Déclencher une release
+
+1. S'assurer que `build-test` (Codemagic) est **vert** sur `main`.
+2. Créer un **tag `v0.1.0`** sur le dépôt GitHub `red1140-hub/PeachTVPlus-iPhone` — p.ex.
+   `gh release create v0.1.0 --target main` (ou l'UI GitHub). Codemagic détecte le tag et lance
+   `ios-testflight`.
+3. Vérifier dans App Store Connect → TestFlight que le build apparaît et finit son traitement.
+
+### 9.4 Reste strictement humain (bloquant — cf. §6)
+
+Compte **Apple Developer (99 $/an)**, création de l'app dans **App Store Connect** (bundle
+`com.peachtvplus.app`), génération de la **clé d'API** (rôle App Manager), **héberger** la
+politique de confidentialité, s'ajouter en **testeur interne**, et la **recette sur appareil**
+(iPhone/iPad réels + **compte Xtream réel**). Claude ne peut ni créer le compte, ni accepter les
+contrats, ni téléverser à ta place.
+
+### 9.5 Reporté explicitement
+
+- **Snapshot tests visuels** (`swift-snapshot-testing`) : nécessitent un **Mac** pour enregistrer
+  les images de référence (sinon CI rouge au 1er run). À faire dans une session avec Mac ; ils
+  alimenteront aussi les **captures d'écran** via Fastlane `snapshot` pour la publication publique.
+- Lane `release_appstore` + `deliver` (App Store **public**) : squelette prêt, à activer plus tard.
