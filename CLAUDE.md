@@ -170,9 +170,19 @@ fichiers. Détail + dossiers dans `docs/PORT-SPEC.md §10`.
 M0 scaffold (CI vert à vide) · M1 réseau+modèles · M2 stockage GRDB + sécurité ·
 M3 lecture (VideoEngine, EPG, catch-up) · M4 téléchargement hors-ligne ⭐ · M5 UI complète
 (responsive iPad) · M6 QA (tests+snapshots+règles CI) · M7 signature + **TestFlight**.
-Détail : `docs/PORT-SPEC.md §11`. **Actuel : M0+M1+M2 + M3a faits (à valider par la CI).
-Prochain : M3b (MobileVLCKit + VLCPlayerEngine + écrans lecteur), de préférence une fois le
-dépôt poussé (résolution SPM du binaire VLCKit validable seulement par la CI macOS).**
+Détail : `docs/PORT-SPEC.md §11`. **Actuel : M0+M1+M2 + M3a + M4 (cœur) faits (à valider par la
+CI). Restants : M3b (MobileVLCKit + VLCPlayerEngine + écrans lecteur), puis M5 (UI complète +
+câblage runtime du téléchargement). M3b/M5 de préférence une fois le dépôt poussé.**
+
+- **Téléchargement (M4, cœur sans dépendance)** : `Download/` — `DownloadManager` (`URLSession`
+  **background**, reprise `resumeData`, réinjection `__cred__` + garde-fou d'hôte, anti-downgrade
+  HTTPS→HTTP, orphelins) ; `DownloadStore` (table GRDB `downloads`, migration **additive v2**) ;
+  politiques **pures testées** : `DownloadQueuePolicy` (max 3, FIFO), `DiskSpaceGuard`,
+  `WiFiOnlyPolicy`, `DownloadError` (401/403 → expiré **sans retry**, disque plein **sans retry**) ;
+  `DownloadPaths` (nom 100% local anti path-traversal, dossier hors backup) ; `DownloadStatus` +
+  **bouton 6 états**. `DownloadManager` n'est pas testé (I/O, device requis). **M5** : écran
+  Téléchargements, `AppContainer` (un seul writer GRDB partagé), `handleEventsForBackgroundURLSession`,
+  purge des téléchargements + fichiers au retrait d'une liste (loi 25).
 
 - **Lecture (M3a, sans dépendance)** : `Player/` — `VideoEngine` (protocole, 2 moteurs),
   `AVPlayerEngine` (AVFoundation), `BufferProfile` (faible latence / équilibré / anti-coupure),

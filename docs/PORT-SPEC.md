@@ -375,8 +375,16 @@ Téléchargement (parallélisables) → UI → QA/TestFlight.**
   **MobileVLCKit** (SPM) + `VLCPlayerEngine` conforme à `VideoEngine`, câbler le coordinateur de
   bascule et les écrans lecteur Live/VOD — **idéalement après que le dépôt soit poussé** (la
   résolution SPM du binaire VLCKit ne peut être validée que par la CI macOS).
-- [ ] **M4** — Téléchargement hors-ligne ⭐ : file background, reprise, Wi-Fi only, espace,
-  écran Téléchargements, bouton 6 états.
+- [x] **M4** — Téléchargement hors-ligne ⭐ (cœur, sans dépendance — **2026-11-12, à valider
+  par la CI**) : table GRDB `downloads` (migration **additive** v2) + `DownloadStore` ;
+  `DownloadManager` (`URLSession` **background**, reprise `resumeData`, réinjection `__cred__`
+  avec garde-fou d'hôte, anti-downgrade HTTPS→HTTP, nettoyage orphelins) ; politiques **pures
+  testées** : `DownloadQueuePolicy` (max 3, FIFO), `DiskSpaceGuard`, `WiFiOnlyPolicy`,
+  `DownloadError` (401/403 → expiré **sans retry**, disque plein **sans retry**, réseau →
+  pause) ; `DownloadPaths` (nom local anti path-traversal + dossier hors backup) ;
+  `DownloadStatus` + **bouton 6 états** + labels d'accessibilité ; tests (store mémoire +
+  logique). **Reste M5** : écran « Disponible hors ligne », câblage runtime (`AppContainer`,
+  `handleEventsForBackgroundURLSession`, purge des téléchargements au retrait d'une liste).
 - [ ] **M5** — UI complète : thème PeachTV+, Accueil (Direct/Films/Séries), détail, recherche,
   favoris, chaînes cachées, réglages (multi-listes, donut, test de vitesse), responsive iPad.
 - [ ] **M6** — QA : tests unitaires + snapshots verts en CI, règles de sécurité CI, checklist

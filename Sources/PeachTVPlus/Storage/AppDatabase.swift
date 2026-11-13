@@ -38,6 +38,28 @@ enum AppDatabase {
         return CatalogStore(writer: queue)
     }
 
+    /// Store des téléchargements adossé à **la même base** que le catalogue (un seul fichier).
+    /// ⚠️ Ouvre sa propre connexion : en production (M5), `AppContainer` partagera **un seul**
+    /// writer pour construire `CatalogStore` **et** `DownloadStore` (éviter deux connexions
+    /// concurrentes au même fichier). Ici (M4), aucun câblage runtime ne les ouvre ensemble.
+    static func downloadStore() throws -> DownloadStore {
+        let support = try FileManager.default.url(
+            for: .applicationSupportDirectory, in: .userDomainMask,
+            appropriateFor: nil, create: true)
+        var url = support.appendingPathComponent(catalogFileName)
+        let queue = try DatabaseQueue(path: url.path)
+        try migrator.migrate(queue)
+        try? url.excludeFromBackup()
+        return DownloadStore(writer: queue)
+    }
+
+    /// Store des téléchargements **en mémoire** — tests.
+    static func inMemoryDownloadStore() throws -> DownloadStore {
+        let queue = try DatabaseQueue()
+        try migrator.migrate(queue)
+        return DownloadStore(writer: queue)
+    }
+
     /// Migrateur partagé. Chaque étape est **additive** et porte un identifiant stable.
     static var migrator: DatabaseMigrator {
         var migrator = DatabaseMigrator()
@@ -128,6 +150,27 @@ enum AppDatabase {
             try db.create(virtualTable: "series_ft", using: FTS5()) { t in
                 t.synchronize(withTable: "series")
                 t.column("name")
+            }
+        }
+
+        // M4 — table des téléchargements. Étape ADDITIVE (jamais toucher v1).
+        migrator.registerMigration("v2-downloads") { db in
+            try db.create(table: "downloads") { t in
+                t.primaryKey("contentKey", .text)   // "movie:123" / "episode:456"
+                t.column("contentType", .text).notNull()
+                t.column("playlistId", .text).notNull().indexed()
+                t.column("title", .text).notNull()
+                // URL de flux MASQUÉE (__cred__) — jamais d'identifiant persisté sur disque.
+                t.column("maskedURL", .text).notNull()
+                t.column("ext", .text).notNull()
+                t.column("localPath", .text)        // nom 100% local (anti path-traversal)
+                t.column("status", .text).notNull()
+                t.column("percent", .double).notNull().defaults(to: 0)
+                t.column("bytesDownloaded", .integer).notNull().defaults(to: 0)
+                t.column("totalBytes", .integer)
+                t.column("resumeData", .blob)        // reprise HTTP Range
+                t.column("errorMessage", .text)
+                t.column("updatedAt", .double).notNull().indexed()
             }
         }
 
