@@ -30,6 +30,7 @@ struct PlayerView: View {
     var onChangeChannel: (Int) -> Void = { _ in }
 
     @StateObject private var coordinator = PlaybackCoordinator()
+    @StateObject private var volume = SystemVolumeController()
 
     @State private var controlsVisible = true
     @State private var hideWorkItem: DispatchWorkItem?
@@ -54,6 +55,11 @@ struct PlayerView: View {
 
                 VideoSurfaceView(coordinator: coordinator)
                     .ignoresSafeArea()
+
+                // MPVolumeView masqué : permet de régler le volume système réel.
+                SystemVolumeHost(controller: volume)
+                    .frame(width: 0, height: 0)
+                    .allowsHitTesting(false)
 
                 gestureLayer(size: geo.size)
 
@@ -276,6 +282,7 @@ struct PlayerView: View {
         if dragSide == nil {
             dragSide = value.startLocation.x < size.width / 2 ? .left : .right
             baselineBrightness = Double(UIScreen.main.brightness)
+            baselineVolumeHUD = Double(volume.current)
         }
         guard let side = dragSide else { return }
 
@@ -286,9 +293,8 @@ struct PlayerView: View {
             UIScreen.main.brightness = CGFloat(v)
             hud = .brightness(v)
         case let .adjustVolume(d):
-            // Le volume système réel (MPVolumeView masqué) est câblé en M5 ; ici on route le
-            // geste et on affiche le HUD pour valider l'arbitre.
             let v = min(1, max(0, baselineVolumeHUD + d))
+            volume.set(Float(v))     // MPVolumeView masqué → volume système réel
             hud = .volume(v)
         default:
             break

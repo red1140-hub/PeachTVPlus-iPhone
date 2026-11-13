@@ -2,15 +2,19 @@ import SwiftUI
 
 /// Point d'entrée de l'app PeachTV+ (iOS/iPadOS).
 ///
-/// M0 — scaffold minimal, sans dépendance externe, pour un premier CI vert.
-/// L'injection de dépendances (AppContainer) et le routage réel (login → shell)
-/// arrivent avec les jalons M1+ (voir docs/PORT-SPEC.md).
+/// M5 — câblage runtime : `AppContainer` (DI, writer GRDB unique, gestionnaire de
+/// téléchargements), `AppDelegate` pour le réveil background des téléchargements, et routage
+/// login → shell. Voir `docs/PORT-SPEC.md §8`.
 @main
 struct PeachTVPlusApp: App {
+    @UIApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
+    @StateObject private var container = AppContainer.live()
+
     var body: some Scene {
         WindowGroup {
-            RootView()
+            RootView(container: container)
                 .preferredColorScheme(.dark) // thème sombre OLED forcé (comme Android)
+                .task { container.start() }  // rattachement aux téléchargements background
         }
     }
 }

@@ -60,6 +60,29 @@ enum AppDatabase {
         return DownloadStore(writer: queue)
     }
 
+    // MARK: - Writer unique partagé (M5, câblé par AppContainer)
+
+    /// **Un seul** `DatabaseQueue` sur disque, partagé par le catalogue ET les téléchargements
+    /// (jamais deux connexions concurrentes au même fichier). C'est la forme utilisée en prod
+    /// par `AppContainer`. Voir la mise en garde de `downloadStore()`.
+    static func sharedOnDisk() throws -> (catalog: CatalogStore, downloads: DownloadStore) {
+        let support = try FileManager.default.url(
+            for: .applicationSupportDirectory, in: .userDomainMask,
+            appropriateFor: nil, create: true)
+        var url = support.appendingPathComponent(catalogFileName)
+        let queue = try DatabaseQueue(path: url.path)
+        try migrator.migrate(queue)
+        try? url.excludeFromBackup()
+        return (CatalogStore(writer: queue), DownloadStore(writer: queue))
+    }
+
+    /// Writer unique **en mémoire** (tests/prévisualisations).
+    static func sharedInMemory() throws -> (catalog: CatalogStore, downloads: DownloadStore) {
+        let queue = try DatabaseQueue()
+        try migrator.migrate(queue)
+        return (CatalogStore(writer: queue), DownloadStore(writer: queue))
+    }
+
     /// Migrateur partagé. Chaque étape est **additive** et porte un identifiant stable.
     static var migrator: DatabaseMigrator {
         var migrator = DatabaseMigrator()
