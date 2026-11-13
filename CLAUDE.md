@@ -170,7 +170,20 @@ fichiers. Détail + dossiers dans `docs/PORT-SPEC.md §10`.
 M0 scaffold (CI vert à vide) · M1 réseau+modèles · M2 stockage GRDB + sécurité ·
 M3 lecture (VideoEngine, EPG, catch-up) · M4 téléchargement hors-ligne ⭐ · M5 UI complète
 (responsive iPad) · M6 QA (tests+snapshots+règles CI) · M7 signature + **TestFlight**.
-Détail : `docs/PORT-SPEC.md §11`. **Actuel : M2 fait (M0+M1+M2 à valider par la CI). Prochain : M3.**
+Détail : `docs/PORT-SPEC.md §11`. **Actuel : M0+M1+M2 + M3a faits (à valider par la CI).
+Prochain : M3b (MobileVLCKit + VLCPlayerEngine + écrans lecteur), de préférence une fois le
+dépôt poussé (résolution SPM du binaire VLCKit validable seulement par la CI macOS).**
+
+- **Lecture (M3a, sans dépendance)** : `Player/` — `VideoEngine` (protocole, 2 moteurs),
+  `AVPlayerEngine` (AVFoundation), `BufferProfile` (faible latence / équilibré / anti-coupure),
+  `StreamFormat` (choix moteur sans se fier à l'extension + URL alternative TS↔HLS +
+  `PlaybackFallbackGuard` : **une** bascule par tentative), `PlaybackRetryPolicy`/`Controller`
+  (back-off 1→2→4→8 s, **jamais** de retry sur 401/403/404, plus de tentatives en Live),
+  `PlaybackError` (titre + cause + **une** action ; distingue flux mort (serveur) de connexion
+  coupée (local)), `PlayerGestureArbiter` (**un seul** routeur : tap / drag vertical
+  volume-droite·luminosité-gauche / drag horizontal chaîne± en Direct), `EpgTimeline`
+  (now/next/progression), `CatchUp` (timeshift depuis l'EPG). **M3b** ajoutera `VLCPlayerEngine`
+  + le coordinateur de bascule + les écrans SwiftUI du lecteur.
 
 - **Stockage (M2)** : `Storage/AppDatabase` (GRDB, `DatabaseMigrator` **additif** — jamais de
   drop&recreate), `Storage/CatalogStore` (DAO : upsert par lots, lectures paginées, recherche

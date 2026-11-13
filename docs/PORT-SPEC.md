@@ -365,8 +365,16 @@ Téléchargement (parallélisables) → UI → QA/TestFlight.**
   repository câblé (vidage cache à la bascule, purge au retrait, effacement total loi 25) ;
   tests XCTest (cache mémoire, Keychain, gardes). GRDB = 1re dépendance SPM.
   *(fait — 2026-11-12 ; à valider par la CI macos-14)*
-- [ ] **M3** — Lecture : `VideoEngine` (AVPlayer+VLCKit), résilience, écrans lecteur Live/VOD,
-  EPG, catch-up, gestes.
+- [~] **M3** — Lecture. **M3a fait (2026-11-12, sans dépendance, à valider par la CI)** :
+  `Player/StreamFormat` (choix moteur + URL alternative TS↔HLS + `PlaybackFallbackGuard` une
+  bascule), `VideoEngine` (protocole) + `BufferProfile` (3 crans) + `AVPlayerEngine`
+  (AVFoundation), `PlaybackRetryPolicy`/`Controller` (back-off 1→2→4→8, no-retry 401/403/404,
+  plus de tentatives en Live), `PlaybackError.classify` (titre+cause+action, serveur vs local),
+  `PlayerGestureArbiter` (routeur unique), `EpgTimeline` (now/next/progression), `CatchUp`
+  (timeshift depuis l'EPG) + tests XCTest (logique pure). **M3b à faire** : ajouter
+  **MobileVLCKit** (SPM) + `VLCPlayerEngine` conforme à `VideoEngine`, câbler le coordinateur de
+  bascule et les écrans lecteur Live/VOD — **idéalement après que le dépôt soit poussé** (la
+  résolution SPM du binaire VLCKit ne peut être validée que par la CI macOS).
 - [ ] **M4** — Téléchargement hors-ligne ⭐ : file background, reprise, Wi-Fi only, espace,
   écran Téléchargements, bouton 6 états.
 - [ ] **M5** — UI complète : thème PeachTV+, Accueil (Direct/Films/Séries), détail, recherche,
