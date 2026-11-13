@@ -1,0 +1,54 @@
+# Codemagic CI — PeachTV+ iOS (build + tests sur runner macOS, tier gratuit).
+#
+# Pourquoi Codemagic et pas GitHub Actions pour le build ? GitHub n'alloue pas de runner
+# macOS hébergé à ce dépôt (file d'attente indéfinie, constaté 2026-11). Codemagic fournit
+# des runners macOS Apple Silicon avec un tier gratuit (~500 min/mois), piloté par ce YAML.
+# Les règles de sécurité tournent aussi côté GitHub (.github/workflows/ci.yml), on les
+# redouble ici pour que le build Codemagic soit autoporteur.
+#
+# Côté humain (une fois) : créer un compte sur codemagic.io (connexion via GitHub), puis
+# « Add application » → choisir red1140-hub/PeachTVPlus-iPhone → Codemagic détecte ce fichier.
+
+workflows:
+  build-test:
+    name: PeachTV+ iOS — build & tests
+    instance_type: mac_mini_m2
+    max_build_duration: 45
+    environment:
+      xcode: latest          # iOS 18 SDK ; cible de déploiement iOS 17 (project.yml)
+    triggering:
+      events:
+        - push
+        - pull_request
+      branch_patterns:
+        - pattern: main
+          include: true
+    scripts:
+      - name: Règles de sécurité (grep — fail the build)
+        script: |
+          set -euo pipefail
+          SRC=Sources
+          if grep -RInE '\.useCredential.*serverTrust|allowsAnyHTTPSCertificate|_allowsAnyHTTPSCertificate' "$SRC"; then
+            echo "❌ TrustAll / vérification TLS désactivée"; exit 1; fi
+          if grep -RInE 'print\(.*(username=|password=|/live/|/movie/|/series/|/timeshift/|player_api\.php)' "$SRC"; then
+            echo "❌ URL/secret potentiellement logué sans redaction"; exit 1; fi
+          if grep -RInE 'UserDefaults.*(password|username|credential)' "$SRC"; then
+            echo "❌ Identifiants potentiellement en UserDefaults"; exit 1; fi
+          echo "✅ Règles de sécurité OK"
+      - name: Installer XcodeGen
+        script: brew install xcodegen
+      - name: Générer le projet (.xcodeproj non versionné)
+        script: xcodegen generate
+      - name: Résoudre les dépendances SPM (GRDB)
+        script: xcodebuild -resolvePackageDependencies -scheme PeachTVPlus
+      - name: Build + tests (simulateur iPhone)
+        script: |
+          set -o pipefail
+          # Choisit dynamiquement un simulateur iPhone disponible (pas de nom codé en dur).
+          udid=$(xcrun simctl list devices available | awk -F'[()]' '/iPhone/{print $2; exit}')
+          echo "Simulateur choisi : $udid"
+          xcodebuild \
+            -scheme PeachTVPlus \
+            -destination "id=$udid" \
+            -enableCodeCoverage YES \
+            clean build test

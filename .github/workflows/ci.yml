@@ -1,7 +1,10 @@
 name: CI
 
-# Ce workflow suppose que le DOSSIER PeachTV+_iPhone est poussé comme son PROPRE dépôt
-# GitHub (racine du dépôt = ce dossier). Pas de préfixe working-directory.
+# Racine du dépôt = le dossier PeachTV+_iPhone (poussé comme dépôt autonome).
+#
+# ⚠️ Le build + les tests macOS tournent sur CODEMAGIC (voir codemagic.yaml) : GitHub
+# n'alloue pas de runner macOS hébergé à ce dépôt (file d'attente indéfinie, 2026-11).
+# Ce workflow ne garde donc que les règles de sécurité (Linux, rapide, fiable).
 
 on:
   push:
@@ -11,7 +14,6 @@ on:
 jobs:
   security-rules:
     # Règles de sécurité "fail the build" (voir docs/security.md).
-    # Tournent sur Linux, rapides, AVANT de réserver un runner macOS (coûteux).
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -30,35 +32,4 @@ jobs:
           if grep -RInE 'UserDefaults.*(password|username|credential)' Sources/ ; then
             echo "::error::Identifiants potentiellement stockés dans UserDefaults (utiliser le Keychain)."; exit 1
           fi
-
-  build-test:
-    # macos-13 (Intel, runner standard GRATUIT sur dépôt public). On évite le label
-    # macos-14 qui, sur ce compte, se résout vers un SKU « ...-us-xl » NON supporté.
-    runs-on: macos-13
-    needs: security-rules
-    steps:
-      - uses: actions/checkout@v4
-      - name: Sélectionner le dernier Xcode disponible
-        # Robuste quelle que soit l'image : prend le Xcode le plus récent installé
-        # (iOS 17 SDK requis → Xcode 15+), sans chemin codé en dur.
-        run: |
-          latest=$(ls -d /Applications/Xcode_*.app 2>/dev/null | sort -V | tail -1)
-          if [ -n "$latest" ]; then sudo xcode-select -s "$latest"; fi
-          xcodebuild -version
-      - name: Installer XcodeGen
-        run: brew install xcodegen
-      - name: Générer le projet
-        run: xcodegen generate
-      - name: Résoudre les dépendances SPM
-        run: xcodebuild -resolvePackageDependencies -scheme PeachTVPlus
-      - name: Build + tests (simulateur)
-        run: |
-          set -o pipefail
-          # Choisit dynamiquement un simulateur iPhone disponible (pas de nom codé en dur).
-          udid=$(xcrun simctl list devices available | awk -F'[()]' '/iPhone/{print $2; exit}')
-          echo "Simulateur choisi : $udid"
-          xcodebuild \
-            -scheme PeachTVPlus \
-            -destination "id=$udid" \
-            -enableCodeCoverage YES \
-            clean build test
+    # Le build + tests macOS (XcodeGen + xcodebuild) = codemagic.yaml.
