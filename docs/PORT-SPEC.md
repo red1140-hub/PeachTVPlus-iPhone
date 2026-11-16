@@ -10,6 +10,11 @@
 >
 > **⚠️ `../mytv-player` est une référence EN LECTURE SEULE** — jamais modifiée.
 > Dernière synchro sur l'état PeachTV+ v1.04 : **2026-11-12**.
+>
+> **📌 Deltas Android livrés depuis (v1.05 → v1.08)** : voir
+> [`ANDROID-DELTAS.md`](ANDROID-DELTAS.md) (recherche scopée aux chaînes de l'Accueil +
+> durcissement LIKE, flèche retour en plein écran paysage, réordonnancement des favoris,
+> recherche d'émissions EPG, stabilité Live/Cast). À porter au fil des jalons.
 
 ---
 
