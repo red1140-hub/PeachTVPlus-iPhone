@@ -86,6 +86,7 @@ struct LiveView: View {
                 }
             }
             .navigationTitle("Direct")
+            .navigationBarTitleDisplayMode(.inline)
             .toolbar { categoryMenu }
             .task { await vm.loadInitial() }
             .refreshable { await vm.refresh() }

@@ -1,16 +1,16 @@
 import SwiftUI
 
-/// Shell principal à onglets (une fois connecté) : Direct / Recherche / Favoris /
-/// Téléchargements / Réglages. Chaque onglet construit son propre ViewModel à partir du
-/// conteneur. Voir `docs/PORT-SPEC.md §8`.
+/// Shell principal à onglets (une fois connecté) : **Accueil** (sous-onglets Direct / Films /
+/// Séries) / Recherche / Favoris / Téléchargements / Réglages. Chaque onglet construit son propre
+/// ViewModel à partir du conteneur. Voir `docs/PORT-SPEC.md §8`.
 struct MainShell: View {
     let container: AppContainer
     @ObservedObject var session: SessionViewModel
 
     var body: some View {
         TabView {
-            LiveView(container: container)
-                .tabItem { Label("Direct", systemImage: "play.tv") }
+            HomeView(container: container)
+                .tabItem { Label("Accueil", systemImage: "house") }
 
             SearchView(container: container)
                 .tabItem { Label("Recherche", systemImage: "magnifyingglass") }
