@@ -30,12 +30,16 @@ enum RedactingLogger {
 
     static func debug(_ message: @autoclosure () -> String) {
         #if DEBUG
-        logger.debug("\(redact(message()), privacy: .public)")
+        // Évaluer l'autoclosure non-échappante AVANT l'interpolation os.Logger (qui est
+        // échappante sous Xcode 26) : on ne capture qu'une String, pas le paramètre.
+        let text = redact(message())
+        logger.debug("\(text, privacy: .public)")
         #endif
     }
 
     static func error(_ message: @autoclosure () -> String) {
-        logger.error("\(redact(message()), privacy: .public)")
+        let text = redact(message())
+        logger.error("\(text, privacy: .public)")
     }
 
     private static func replace(in input: String, pattern: String, template: String) -> String {
