@@ -60,7 +60,7 @@ final class VLCPlayerEngine: NSObject, VideoEngine {
     }
 
     var currentTimeSeconds: Double? {
-        let ms = player.time?.intValue ?? 0        // ms ; 0 si indisponible
+        let ms = player.time.intValue              // VLCTime non-optionnel ; ms, 0 si indisponible
         return ms > 0 ? Double(ms) / 1000 : nil
     }
 
@@ -80,7 +80,7 @@ final class VLCPlayerEngine: NSObject, VideoEngine {
 
 extension VLCPlayerEngine: VLCMediaPlayerDelegate {
 
-    @objc func mediaPlayerStateChanged(_ aNotification: Notification!) {
+    @objc func mediaPlayerStateChanged(_ aNotification: Notification) {
         let mapped: PlaybackState
         switch player.state {
         case .opening:    mapped = .preparing
@@ -90,6 +90,7 @@ extension VLCPlayerEngine: VLCMediaPlayerDelegate {
         case .stopped:    mapped = .idle
         case .ended:      mapped = .ended
         case .error:      mapped = .failed(.unsupported)  // conteneur/codec illisible → bascule
+        case .esAdded:    mapped = state                  // pistes détectées : pas d'état visible
         @unknown default: mapped = state
         }
         // VLCKit notifie sur le thread principal ; on reste défensif par cohérence avec AVPlayerEngine.
