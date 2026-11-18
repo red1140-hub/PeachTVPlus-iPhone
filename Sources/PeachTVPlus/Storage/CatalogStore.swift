@@ -74,27 +74,47 @@ struct CatalogStore {
 
     // MARK: - Recherche FTS5 (par titre ; jamais un filtre mémoire)
 
+    // Les tables FTS5 (`*_ft`) sont **séparées** et synchronisées avec les tables de contenu
+    // (partage du `rowid` via triggers). On interroge donc la table FTS en MATCH puis on joint
+    // la table de contenu par `rowid` — on NE peut PAS faire `MovieRecord.matching(...)` sur la
+    // table `movies` (non-FTS) : SQLite rejette alors le MATCH et la recherche renvoyait vide.
+
     func searchLiveChannels(_ query: String, limit: Int = 50, offset: Int = 0) throws -> [LiveChannel] {
         guard let pattern = FTS5Pattern(matchingAllTokensIn: query) else { return [] }
         return try writer.read { db in
-            try LiveChannelRecord.all().matching(pattern)
-                .order(Column("name")).limit(limit, offset: offset).fetchAll(db).map(\.domain)
+            try LiveChannelRecord.fetchAll(db, sql: """
+                SELECT live_channels.* FROM live_channels
+                JOIN live_channels_ft ON live_channels_ft.rowid = live_channels.rowid
+                WHERE live_channels_ft MATCH ?
+                ORDER BY live_channels.name
+                LIMIT ? OFFSET ?
+                """, arguments: [pattern, limit, offset]).map(\.domain)
         }
     }
 
     func searchMovies(_ query: String, limit: Int = 50, offset: Int = 0) throws -> [Movie] {
         guard let pattern = FTS5Pattern(matchingAllTokensIn: query) else { return [] }
         return try writer.read { db in
-            try MovieRecord.all().matching(pattern)
-                .order(Column("name")).limit(limit, offset: offset).fetchAll(db).map(\.domain)
+            try MovieRecord.fetchAll(db, sql: """
+                SELECT movies.* FROM movies
+                JOIN movies_ft ON movies_ft.rowid = movies.rowid
+                WHERE movies_ft MATCH ?
+                ORDER BY movies.name
+                LIMIT ? OFFSET ?
+                """, arguments: [pattern, limit, offset]).map(\.domain)
         }
     }
 
     func searchSeries(_ query: String, limit: Int = 50, offset: Int = 0) throws -> [Series] {
         guard let pattern = FTS5Pattern(matchingAllTokensIn: query) else { return [] }
         return try writer.read { db in
-            try SeriesRecord.all().matching(pattern)
-                .order(Column("name")).limit(limit, offset: offset).fetchAll(db).map(\.domain)
+            try SeriesRecord.fetchAll(db, sql: """
+                SELECT series.* FROM series
+                JOIN series_ft ON series_ft.rowid = series.rowid
+                WHERE series_ft MATCH ?
+                ORDER BY series.name
+                LIMIT ? OFFSET ?
+                """, arguments: [pattern, limit, offset]).map(\.domain)
         }
     }
 

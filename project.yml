@@ -71,8 +71,13 @@ targets:
         UILaunchScreen: {}
         UIApplicationSceneManifest:
           UIApplicationSupportsMultipleScenes: true
+        # iPhone : portrait + paysage (sinon le lecteur ne peut pas passer en plein écran
+        # paysage — la rotation est bloquée). Idéal plus tard : verrouiller la navigation en
+        # portrait et ne forcer le paysage que pour le lecteur (via AppDelegate).
         UISupportedInterfaceOrientations:
           - UIInterfaceOrientationPortrait
+          - UIInterfaceOrientationLandscapeLeft
+          - UIInterfaceOrientationLandscapeRight
         UISupportedInterfaceOrientations~ipad:
           - UIInterfaceOrientationPortrait
           - UIInterfaceOrientationPortraitUpsideDown

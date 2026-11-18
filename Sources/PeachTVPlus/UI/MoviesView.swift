@@ -67,19 +67,30 @@ struct MoviesView: View {
 
     var body: some View {
         NavigationStack {
-            Group {
-                if vm.isLoading && vm.movies.isEmpty {
-                    ProgressView("Chargement du catalogue…")
-                } else if vm.movies.isEmpty {
-                    emptyState
-                } else {
-                    grid
+            VStack(spacing: 0) {
+                if !vm.categories.isEmpty {
+                    CategoryChips(categories: vm.categories,
+                                  selectedId: vm.selectedCategoryId,
+                                  allLabel: "Tous",
+                                  onSelect: { vm.select($0) })
+                    Divider()
                 }
+                content
             }
             .navigationTitle("Films")
             .navigationBarTitleDisplayMode(.inline)
-            .toolbar { categoryMenu }
             .task { await vm.loadInitial() }
+        }
+    }
+
+    @ViewBuilder private var content: some View {
+        if vm.isLoading && vm.movies.isEmpty {
+            ProgressView("Chargement du catalogue…")
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+        } else if vm.movies.isEmpty {
+            emptyState
+        } else {
+            grid
         }
     }
 
@@ -117,17 +128,6 @@ struct MoviesView: View {
         }
     }
 
-    private var categoryMenu: some ToolbarContent {
-        ToolbarItem(placement: .topBarTrailing) {
-            Menu {
-                Button("Tous les films") { vm.select(nil) }
-                Divider()
-                ForEach(vm.categories) { cat in Button(cat.name) { vm.select(cat.id) } }
-            } label: {
-                Label(vm.selectedCategoryName, systemImage: "line.3.horizontal.decrease.circle")
-            }
-        }
-    }
 }
 
 // MARK: - Fiche détail film

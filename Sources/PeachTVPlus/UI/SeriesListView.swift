@@ -60,19 +60,30 @@ struct SeriesListView: View {
 
     var body: some View {
         NavigationStack {
-            Group {
-                if vm.isLoading && vm.series.isEmpty {
-                    ProgressView("Chargement du catalogue…")
-                } else if vm.series.isEmpty {
-                    emptyState
-                } else {
-                    grid
+            VStack(spacing: 0) {
+                if !vm.categories.isEmpty {
+                    CategoryChips(categories: vm.categories,
+                                  selectedId: vm.selectedCategoryId,
+                                  allLabel: "Toutes",
+                                  onSelect: { vm.select($0) })
+                    Divider()
                 }
+                content
             }
             .navigationTitle("Séries")
             .navigationBarTitleDisplayMode(.inline)
-            .toolbar { categoryMenu }
             .task { await vm.loadInitial() }
+        }
+    }
+
+    @ViewBuilder private var content: some View {
+        if vm.isLoading && vm.series.isEmpty {
+            ProgressView("Chargement du catalogue…")
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+        } else if vm.series.isEmpty {
+            emptyState
+        } else {
+            grid
         }
     }
 
@@ -110,15 +121,4 @@ struct SeriesListView: View {
         }
     }
 
-    private var categoryMenu: some ToolbarContent {
-        ToolbarItem(placement: .topBarTrailing) {
-            Menu {
-                Button("Toutes les séries") { vm.select(nil) }
-                Divider()
-                ForEach(vm.categories) { cat in Button(cat.name) { vm.select(cat.id) } }
-            } label: {
-                Label(vm.selectedCategoryName, systemImage: "line.3.horizontal.decrease.circle")
-            }
-        }
-    }
 }

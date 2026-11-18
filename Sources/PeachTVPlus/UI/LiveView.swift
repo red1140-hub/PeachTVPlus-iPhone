@@ -23,6 +23,7 @@ final class LiveViewModel: ObservableObject {
             cats = (try? container.catalogStore.categories(type: .live)) ?? []
         }
         categories = cats
+        if selectedCategoryId == nil { selectedCategoryId = Self.defaultLiveCategory(cats)?.id }
         reloadChannels()
     }
 
@@ -52,6 +53,14 @@ final class LiveViewModel: ObservableObject {
         guard let id = selectedCategoryId else { return "Toutes les chaînes" }
         return categories.first { $0.id == id }?.name ?? "Catégorie"
     }
+
+    /// Catégorie par défaut du Direct = « Québec » (nom contenant « québec »/« quebec »),
+    /// sinon la première. Reprise du `defaultQuebecCategory` Android.
+    static func defaultLiveCategory(_ cats: [Category]) -> Category? {
+        cats.first { $0.name.localizedCaseInsensitiveContains("québec") }
+            ?? cats.first { $0.name.localizedCaseInsensitiveContains("quebec") }
+            ?? cats.first
+    }
 }
 
 struct LiveView: View {
@@ -64,35 +73,49 @@ struct LiveView: View {
 
     var body: some View {
         NavigationStack {
-            Group {
-                if vm.isLoading && vm.channels.isEmpty {
-                    ProgressView("Chargement du catalogue…")
-                } else if vm.channels.isEmpty {
-                    if let error = vm.syncError {
-                        ContentUnavailableView {
-                            Label("Catalogue indisponible", systemImage: "exclamationmark.triangle")
-                        } description: {
-                            Text(error)
-                        } actions: {
-                            Button("Réessayer") { Task { await vm.refresh() } }
-                        }
-                    } else {
-                        ContentUnavailableView("Aucune chaîne",
-                                               systemImage: "tv",
-                                               description: Text("Tirez pour rafraîchir le catalogue."))
-                    }
-                } else {
-                    channelList
+            VStack(spacing: 0) {
+                if !vm.categories.isEmpty {
+                    CategoryChips(categories: vm.categories,
+                                  selectedId: vm.selectedCategoryId,
+                                  allLabel: "Toutes",
+                                  onSelect: { vm.select($0) })
+                    Divider()
                 }
+                content
             }
             .navigationTitle("Direct")
             .navigationBarTitleDisplayMode(.inline)
-            .toolbar { categoryMenu }
             .task { await vm.loadInitial() }
-            .refreshable { await vm.refresh() }
             .fullScreenCover(item: $presentation) { p in
                 PlayerView(request: p.request, onClose: { presentation = nil })
             }
+        }
+    }
+
+    @ViewBuilder private var content: some View {
+        if vm.isLoading && vm.channels.isEmpty {
+            ProgressView("Chargement du catalogue…")
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+        } else if vm.channels.isEmpty {
+            emptyState
+        } else {
+            channelList.refreshable { await vm.refresh() }
+        }
+    }
+
+    @ViewBuilder private var emptyState: some View {
+        if let error = vm.syncError {
+            ContentUnavailableView {
+                Label("Catalogue indisponible", systemImage: "exclamationmark.triangle")
+            } description: {
+                Text(error)
+            } actions: {
+                Button("Réessayer") { Task { await vm.refresh() } }
+            }
+        } else {
+            ContentUnavailableView("Aucune chaîne",
+                                   systemImage: "tv",
+                                   description: Text("Tirez pour rafraîchir le catalogue."))
         }
     }
 
@@ -118,19 +141,5 @@ struct LiveView: View {
             }
         }
         .listStyle(.plain)
-    }
-
-    private var categoryMenu: some ToolbarContent {
-        ToolbarItem(placement: .topBarTrailing) {
-            Menu {
-                Button("Toutes les chaînes") { vm.select(nil) }
-                Divider()
-                ForEach(vm.categories) { cat in
-                    Button(cat.name) { vm.select(cat.id) }
-                }
-            } label: {
-                Label(vm.selectedCategoryName, systemImage: "line.3.horizontal.decrease.circle")
-            }
-        }
     }
 }
