@@ -15,7 +15,9 @@ workflows:
     instance_type: mac_mini_m2
     max_build_duration: 45
     environment:
-      xcode: latest          # iOS 18 SDK ; cible de déploiement iOS 17 (project.yml)
+      xcode: "26.6"          # FIGÉ : « latest » dérive et a cassé un build déjà vert
+                             # (durcissement autoclosure Xcode 26). Monter ce numéro
+                             # volontairement après avoir validé un build. Déploiement iOS 17.
     triggering:
       events:
         - push
@@ -71,7 +73,7 @@ workflows:
     instance_type: mac_mini_m2
     max_build_duration: 60
     environment:
-      xcode: latest
+      xcode: "26.6"
       groups:
         - appstore_credentials
     triggering:
@@ -138,7 +140,7 @@ workflows:
     instance_type: mac_mini_m2
     max_build_duration: 60
     environment:
-      xcode: latest
+      xcode: "26.6"
     scripts:
       - name: Règles de sécurité (grep — fail the build)
         script: |
