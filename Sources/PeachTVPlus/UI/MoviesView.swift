@@ -155,6 +155,18 @@ final class MovieDetailViewModel: ObservableObject {
     func request() -> PlaybackRequest? {
         container.activeFactory.map { PlaybackURLBuilder.movie(movie, factory: $0) }
     }
+
+    var downloadKey: String { "movie:\(movie.id)" }
+
+    func enqueueDownload() {
+        guard let pid = container.repository.activePlaylist?.id,
+              let factory = container.activeFactory else { return }
+        let ext = (movie.containerExtension?.isEmpty == false) ? movie.containerExtension!
+                                                               : PlaybackURLBuilder.defaultVodExtension
+        let masked = factory.maskedStreamURLString(kind: .movie, id: movie.id, ext: ext)
+        container.downloadManager.enqueue(contentKey: downloadKey, contentType: .vod,
+                                          playlistId: pid, title: movie.name, maskedURL: masked, ext: ext)
+    }
 }
 
 /// Fiche d'un film : affiche, titre, genre/note/date, résumé, bouton Lecture.
@@ -162,8 +174,10 @@ final class MovieDetailViewModel: ObservableObject {
 struct MovieDetailView: View {
     @StateObject private var vm: MovieDetailViewModel
     @State private var presentation: PlayerPresentation?
+    private let container: AppContainer
 
     init(movie: Movie, container: AppContainer) {
+        self.container = container
         _vm = StateObject(wrappedValue: MovieDetailViewModel(movie: movie, container: container))
     }
 
@@ -196,6 +210,11 @@ struct MovieDetailView: View {
                 }
                 .buttonStyle(.borderedProminent)
                 .tint(Theme.accent)
+
+                DownloadControl(container: container, contentKey: vm.downloadKey) {
+                    vm.enqueueDownload()
+                }
+                .frame(maxWidth: .infinity)
 
                 if let plot = vm.detail?.plot, !plot.isEmpty {
                     Text(plot).font(.callout).foregroundStyle(.secondary)

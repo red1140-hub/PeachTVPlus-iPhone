@@ -25,6 +25,20 @@ final class SeriesDetailViewModel: ObservableObject {
             PlaybackURLBuilder.episode(episode, seriesName: series.name, factory: $0)
         }
     }
+
+    func downloadKey(_ ep: Episode) -> String { "episode:\(ep.id)" }
+
+    func enqueueDownload(_ ep: Episode) {
+        guard let pid = container.repository.activePlaylist?.id,
+              let factory = container.activeFactory else { return }
+        let ext = (ep.containerExtension?.isEmpty == false) ? ep.containerExtension!
+                                                            : PlaybackURLBuilder.defaultVodExtension
+        let masked = factory.maskedStreamURLString(kind: .series, id: ep.id, ext: ext)
+        let num = ep.episodeNumber.map { "E\($0)" } ?? ""
+        let title = "\(series.name) · S\(ep.seasonNumber)\(num)"
+        container.downloadManager.enqueue(contentKey: downloadKey(ep), contentType: .series,
+                                          playlistId: pid, title: title, maskedURL: masked, ext: ext)
+    }
 }
 
 /// Détail d'une série : saisons → épisodes, lecture d'un épisode. Atteint depuis la Recherche
@@ -32,8 +46,10 @@ final class SeriesDetailViewModel: ObservableObject {
 struct SeriesDetailView: View {
     @StateObject private var vm: SeriesDetailViewModel
     @State private var presentation: PlayerPresentation?
+    private let container: AppContainer
 
     init(series: Series, container: AppContainer) {
+        self.container = container
         _vm = StateObject(wrappedValue: SeriesDetailViewModel(series: series, container: container))
     }
 
@@ -70,20 +86,29 @@ struct SeriesDetailView: View {
             ForEach(detail.seasons) { season in
                 Section("Saison \(season.number)") {
                     ForEach(season.episodes) { episode in
-                        Button {
-                            if let r = vm.request(for: episode) {
-                                presentation = PlayerPresentation(request: r)
+                        HStack(spacing: 12) {
+                            Button {
+                                if let r = vm.request(for: episode) {
+                                    presentation = PlayerPresentation(request: r)
+                                }
+                            } label: {
+                                HStack(spacing: 12) {
+                                    Text(episodeLabel(episode))
+                                        .font(.subheadline.monospacedDigit())
+                                        .foregroundStyle(Theme.accent)
+                                        .frame(minWidth: 44, alignment: .leading)
+                                    Text(episode.title).lineLimit(1)
+                                    Spacer()
+                                    Image(systemName: "play.circle").foregroundStyle(.secondary)
+                                }
+                                .contentShape(Rectangle())
                             }
-                        } label: {
-                            HStack(spacing: 12) {
-                                Text(episodeLabel(episode))
-                                    .font(.subheadline.monospacedDigit())
-                                    .foregroundStyle(.orange)
-                                    .frame(minWidth: 44, alignment: .leading)
-                                Text(episode.title).lineLimit(1)
-                                Spacer()
-                                Image(systemName: "play.circle").foregroundStyle(.secondary)
-                            }
+                            .buttonStyle(.plain)
+
+                            DownloadControl(container: container,
+                                            contentKey: vm.downloadKey(episode),
+                                            enqueue: { vm.enqueueDownload(episode) },
+                                            compact: true)
                         }
                     }
                 }
