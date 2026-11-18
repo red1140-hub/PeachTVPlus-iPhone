@@ -30,6 +30,8 @@ struct PlayerView: View {
     var onChangeChannel: (Int) -> Void = { _ in }
     /// Direct : logo de la chaîne, affiché dans le bandeau 5 s au (re)lancement d'une chaîne.
     var channelLogoURL: String? = nil
+    /// Direct : ouvre le guide horaire (rattrapage). Si nil, aucun bouton guide n'est affiché.
+    var onShowGuide: (() -> Void)? = nil
 
     @StateObject private var coordinator = PlaybackCoordinator()
     @StateObject private var volume = SystemVolumeController()
@@ -163,6 +165,16 @@ struct PlayerView: View {
                 }
             }
             Spacer(minLength: 0)
+
+            if request.isLive, let onShowGuide {
+                Button(action: onShowGuide) {
+                    Image(systemName: "list.bullet.rectangle")
+                        .font(.title3.weight(.semibold))
+                        .foregroundStyle(.white)
+                        .frame(width: 44, height: 44)
+                }
+                .accessibilityLabel("Guide horaire")
+            }
         }
     }
 

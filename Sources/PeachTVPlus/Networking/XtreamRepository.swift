@@ -188,4 +188,11 @@ final class XtreamRepository {
         guard let dto = try? await api.shortEpg(streamId: streamId, limit: limit) else { return [] }
         return XtreamMapping.epgProgrammes(from: dto)
     }
+
+    /// EPG complet du jour d'une chaîne (guide horaire + rattrapage), à la demande.
+    func fullEpg(streamId: String) async -> [EpgProgramme] {
+        guard let api = currentAPI() else { return [] }
+        guard let dto = try? await api.simpleDataTable(streamId: streamId) else { return [] }
+        return XtreamMapping.epgProgrammes(from: dto)
+    }
 }

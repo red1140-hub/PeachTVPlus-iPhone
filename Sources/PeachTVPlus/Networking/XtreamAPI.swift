@@ -102,6 +102,13 @@ struct XtreamAPI: XtreamAPIProtocol {
         try await get(urlFactory.shortEpg(streamId: streamId, limit: limit))
     }
 
+    /// EPG complet du jour pour une chaîne (`get_simple_data_table`) — sert au guide horaire +
+    /// rattrapage. Même forme de réponse que `shortEpg` (`epg_listings`). Appel **à la demande**
+    /// (jamais en masse sur toutes les chaînes : risque de bannissement, leçon Android).
+    func simpleDataTable(streamId: String) async throws -> ShortEpgResponseDTO {
+        try await get(urlFactory.simpleDataTable(streamId: streamId))
+    }
+
     // MARK: - Transport
 
     private func get<T: Decodable>(_ url: URL) async throws -> T {
