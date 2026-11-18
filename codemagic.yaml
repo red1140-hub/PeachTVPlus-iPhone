@@ -121,3 +121,68 @@ workflows:
     artifacts:
       - "*.ipa"
       - build/**/*.ipa
+
+  # ============================================================================
+  # IPA NON SIGNÉE — pour sideload par un tiers avec SON PROPRE identifiant Apple
+  # (AltStore / Sideloadly). AUCUN compte Apple ni certificat requis côté build.
+  #
+  # Déclenchement : MANUEL uniquement (aucun bloc `triggering`) → dans l'UI
+  # Codemagic : « Start new build » → workflow « ios-ipa-unsigned ». Ne tourne
+  # jamais sur un push. L'artefact « PeachTv+iphone.ipa » est téléchargeable à la
+  # fin du build. L'app est NON signée : l'utilisateur final la signe avec son
+  # Apple ID gratuit via AltStore/Sideloadly (certif gratuite = à ré-activer tous
+  # les 7 jours). Voir docs/sideload-altstore.md.
+  # ============================================================================
+  ios-ipa-unsigned:
+    name: PeachTV+ iOS — IPA non signée (sideload)
+    instance_type: mac_mini_m2
+    max_build_duration: 60
+    environment:
+      xcode: latest
+    scripts:
+      - name: Règles de sécurité (grep — fail the build)
+        script: |
+          set -euo pipefail
+          SRC=Sources
+          if grep -RInE '\.useCredential.*serverTrust|allowsAnyHTTPSCertificate|_allowsAnyHTTPSCertificate' "$SRC"; then
+            echo "❌ TrustAll / vérification TLS désactivée"; exit 1; fi
+          if grep -RInE 'print\(.*(username=|password=|/live/|/movie/|/series/|/timeshift/|player_api\.php)' "$SRC"; then
+            echo "❌ URL/secret potentiellement logué sans redaction"; exit 1; fi
+          if grep -RInE 'UserDefaults.*(password|username|credential)' "$SRC"; then
+            echo "❌ Identifiants potentiellement en UserDefaults"; exit 1; fi
+          echo "✅ Règles de sécurité OK"
+      - name: Installer XcodeGen
+        script: brew install xcodegen
+      - name: Générer le projet (XcodeGen)
+        script: xcodegen generate
+      - name: Résoudre les dépendances SPM
+        script: xcodebuild -resolvePackageDependencies -scheme PeachTVPlus
+      - name: Build device SANS signature
+        script: |
+          set -euo pipefail
+          # Build Release pour appareil (iphoneos, arm64) sans signer : AltStore/
+          # Sideloadly re-signeront l'app ET ses frameworks embarqués (VLCKit).
+          xcodebuild \
+            -scheme PeachTVPlus \
+            -configuration Release \
+            -sdk iphoneos \
+            -derivedDataPath build \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY="" \
+            clean build
+      - name: Assembler PeachTv+iphone.ipa
+        script: |
+          set -euo pipefail
+          APP=$(find build/Build/Products/Release-iphoneos -maxdepth 1 -name '*.app' | head -1)
+          if [ -z "$APP" ]; then echo "❌ .app introuvable"; exit 1; fi
+          echo "App trouvée : $APP"
+          rm -rf Payload "PeachTv+iphone.ipa"
+          mkdir -p Payload
+          cp -R "$APP" Payload/
+          # .ipa = simple zip contenant Payload/<App>.app
+          zip -qry "PeachTv+iphone.ipa" Payload
+          echo "✅ PeachTv+iphone.ipa prêt :"
+          ls -lh "PeachTv+iphone.ipa"
+    artifacts:
+      - "PeachTv+iphone.ipa"
