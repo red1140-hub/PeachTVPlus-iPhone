@@ -56,10 +56,18 @@ targets:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.peachtvplus.app
         TARGETED_DEVICE_FAMILY: "1,2" # iPhone + iPad
+        # Icône d'app : catalogue Assets.xcassets (sous Sources/PeachTVPlus, déjà dans
+        # `sources` → actool le compile et écrit CFBundleIconName). Sans ce réglage,
+        # aucune icône n'est produite (symptôme : app sans icône sur l'écran d'accueil).
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
     info:
       path: Sources/PeachTVPlus/Info.plist
       properties:
         CFBundleDisplayName: PeachTV+
+        # Mode sombre forcé (OLED) dès le lancement, y compris l'écran de démarrage et les
+        # alertes système → supprime le flash blanc au démarrage ; cohérent avec le thème
+        # néon-sur-noir. L'écran de lancement vide s'affiche donc sur fond noir système.
+        UIUserInterfaceStyle: Dark
         UILaunchScreen: {}
         UIApplicationSceneManifest:
           UIApplicationSupportsMultipleScenes: true

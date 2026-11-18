@@ -24,6 +24,6 @@ struct MainShell: View {
             SettingsView(session: session)
                 .tabItem { Label("Réglages", systemImage: "gearshape") }
         }
-        .tint(.orange)
+        .tint(Theme.accent)
     }
 }

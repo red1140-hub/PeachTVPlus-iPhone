@@ -17,6 +17,17 @@ struct LoginView: View {
         NavigationStack {
             Form {
                 Section {
+                    Image("Logo")
+                        .resizable()
+                        .scaledToFit()
+                        .frame(width: 128, height: 128)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 8)
+                        .accessibilityLabel("Logo PeachTV+")
+                }
+                .listRowBackground(Color.clear)
+
+                Section {
                     TextField("Adresse du serveur", text: $server)
                         .textContentType(.URL)
                         .keyboardType(.URL)
@@ -54,6 +65,7 @@ struct LoginView: View {
                 }
             }
             .navigationTitle("PeachTV+")
+            .tint(Theme.accent)
             .toolbar {
                 if onDone != nil {
                     ToolbarItem(placement: .cancellationAction) {
