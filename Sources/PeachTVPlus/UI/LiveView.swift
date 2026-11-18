@@ -6,6 +6,8 @@ final class LiveViewModel: ObservableObject {
     @Published var channels: [LiveChannel] = []
     @Published var selectedCategoryId: String?
     @Published var isLoading = false
+    /// Cause réelle d'un catalogue vide (panne réseau/serveur/décodage), `nil` si tout va bien.
+    @Published var syncError: String?
 
     private let container: AppContainer
     init(container: AppContainer) { self.container = container }
@@ -17,6 +19,7 @@ final class LiveViewModel: ObservableObject {
         var cats = (try? container.catalogStore.categories(type: .live)) ?? []
         if cats.isEmpty {
             await container.catalogSync.sync()
+            syncError = container.catalogSync.lastError
             cats = (try? container.catalogStore.categories(type: .live)) ?? []
         }
         categories = cats
@@ -27,6 +30,7 @@ final class LiveViewModel: ObservableObject {
         isLoading = true
         defer { isLoading = false }
         await container.catalogSync.sync()
+        syncError = container.catalogSync.lastError
         categories = (try? container.catalogStore.categories(type: .live)) ?? []
         reloadChannels()
     }
@@ -64,9 +68,19 @@ struct LiveView: View {
                 if vm.isLoading && vm.channels.isEmpty {
                     ProgressView("Chargement du catalogue…")
                 } else if vm.channels.isEmpty {
-                    ContentUnavailableView("Aucune chaîne",
-                                           systemImage: "tv",
-                                           description: Text("Tirez pour rafraîchir le catalogue."))
+                    if let error = vm.syncError {
+                        ContentUnavailableView {
+                            Label("Catalogue indisponible", systemImage: "exclamationmark.triangle")
+                        } description: {
+                            Text(error)
+                        } actions: {
+                            Button("Réessayer") { Task { await vm.refresh() } }
+                        }
+                    } else {
+                        ContentUnavailableView("Aucune chaîne",
+                                               systemImage: "tv",
+                                               description: Text("Tirez pour rafraîchir le catalogue."))
+                    }
                 } else {
                     channelList
                 }

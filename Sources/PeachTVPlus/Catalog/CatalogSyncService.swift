@@ -14,6 +14,9 @@ final class CatalogSyncService: ObservableObject {
 
     @Published private(set) var isSyncing = false
     @Published private(set) var lastSyncedAt: Date?
+    /// Message FR de la dernière synchro ratée (prêt à afficher, aucun secret) ; `nil` si la
+    /// dernière a réussi. L'UI s'en sert pour montrer la **vraie cause** au lieu d'un vide muet.
+    @Published private(set) var lastError: String?
 
     init(repository: XtreamRepository, catalog: CatalogStore) {
         self.repository = repository
@@ -28,25 +31,37 @@ final class CatalogSyncService: ObservableObject {
 
         let epoch = repository.playlistEpoch
 
-        // Appels séquentiels (repository est @MainActor ; on reste sur le main actor).
-        let liveCats = await repository.liveCategories()
-        let vodCats = await repository.vodCategories()
-        let seriesCats = await repository.seriesCategories()
-        let channels = await repository.liveChannels(categoryId: nil)
-        let films = await repository.movies(categoryId: nil)
-        let shows = await repository.seriesList(categoryId: nil)
-
-        // La source a changé pendant les fetchs → ces données sont périmées, on jette.
-        guard epoch == repository.playlistEpoch else { return }
-
         do {
+            // Appels séquentiels (repository est @MainActor ; on reste sur le main actor).
+            // Toute erreur réseau/HTTP/décodage **remonte ici** au lieu de devenir une liste
+            // vide : sans ça, l'UI affichait « Aucune chaîne » sans jamais montrer la cause.
+            let liveCats = try await repository.liveCategories()
+            let vodCats = try await repository.vodCategories()
+            let seriesCats = try await repository.seriesCategories()
+            let channels = try await repository.liveChannels(categoryId: nil)
+            let films = try await repository.movies(categoryId: nil)
+            let shows = try await repository.seriesList(categoryId: nil)
+
+            // La source a changé pendant les fetchs → ces données sont périmées, on jette.
+            guard epoch == repository.playlistEpoch else { return }
+
+            // On n'écrit le cache **que sur succès complet** : on n'écrase jamais un cache
+            // utile par des listes vides issues d'une panne.
             try catalog.saveCategories(liveCats + vodCats + seriesCats)
             try catalog.saveLiveChannels(channels)
             try catalog.saveMovies(films)
             try catalog.saveSeries(shows)
             lastSyncedAt = Date()
+            lastError = nil
         } catch {
+            lastError = Self.describe(error)
             RedactingLogger.error("Synchronisation du catalogue échouée — \(error)")
         }
+    }
+
+    /// Traduit une erreur en message FR court et sûr (aucun secret).
+    private static func describe(_ error: Error) -> String {
+        if let api = error as? APIError { return api.frenchMessage }
+        return "Échec d'enregistrement du catalogue en local."
     }
 }

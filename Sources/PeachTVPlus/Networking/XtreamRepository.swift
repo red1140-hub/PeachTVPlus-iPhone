@@ -137,34 +137,38 @@ final class XtreamRepository {
         return XtreamAPI(urlFactory: XtreamURLFactory(credentials: credentials), session: session)
     }
 
-    func liveCategories() async -> [Category] {
+    // Ces 6 méthodes **propagent** désormais l'erreur (réseau/HTTP/décodage) au lieu de la
+    // transformer en `[]`. C'est `CatalogSyncService` qui l'attrape et la remonte à l'UI.
+    // Le décodage par élément (voir `XtreamAPI.getArray`) évite qu'un item fautif vide la liste.
+
+    func liveCategories() async throws -> [Category] {
         guard let api = currentAPI() else { return [] }
-        return (try? await XtreamMapping.categories(from: api.liveCategories(), type: .live)) ?? []
+        return XtreamMapping.categories(from: try await api.liveCategories(), type: .live)
     }
 
-    func liveChannels(categoryId: String?) async -> [LiveChannel] {
+    func liveChannels(categoryId: String?) async throws -> [LiveChannel] {
         guard let api = currentAPI() else { return [] }
-        return (try? await XtreamMapping.liveChannels(from: api.liveStreams(categoryId: categoryId))) ?? []
+        return XtreamMapping.liveChannels(from: try await api.liveStreams(categoryId: categoryId))
     }
 
-    func vodCategories() async -> [Category] {
+    func vodCategories() async throws -> [Category] {
         guard let api = currentAPI() else { return [] }
-        return (try? await XtreamMapping.categories(from: api.vodCategories(), type: .vod)) ?? []
+        return XtreamMapping.categories(from: try await api.vodCategories(), type: .vod)
     }
 
-    func movies(categoryId: String?) async -> [Movie] {
+    func movies(categoryId: String?) async throws -> [Movie] {
         guard let api = currentAPI() else { return [] }
-        return (try? await XtreamMapping.movies(from: api.movies(categoryId: categoryId))) ?? []
+        return XtreamMapping.movies(from: try await api.movies(categoryId: categoryId))
     }
 
-    func seriesCategories() async -> [Category] {
+    func seriesCategories() async throws -> [Category] {
         guard let api = currentAPI() else { return [] }
-        return (try? await XtreamMapping.categories(from: api.seriesCategories(), type: .series)) ?? []
+        return XtreamMapping.categories(from: try await api.seriesCategories(), type: .series)
     }
 
-    func seriesList(categoryId: String?) async -> [Series] {
+    func seriesList(categoryId: String?) async throws -> [Series] {
         guard let api = currentAPI() else { return [] }
-        return (try? await XtreamMapping.seriesList(from: api.seriesList(categoryId: categoryId))) ?? []
+        return XtreamMapping.seriesList(from: try await api.seriesList(categoryId: categoryId))
     }
 
     func movieDetail(for movie: Movie) async -> MovieDetail? {
