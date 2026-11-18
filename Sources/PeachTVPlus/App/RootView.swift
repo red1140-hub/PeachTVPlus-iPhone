@@ -22,28 +22,13 @@ struct RootView: View {
                 }
             }
             if showSplash {
-                SplashView().transition(.opacity)
+                SplashVideoView(onFinish: finishSplash).transition(.opacity)
             }
         }
-        .task {
-            try? await Task.sleep(nanoseconds: 1_200_000_000) // ~1,2 s
-            withAnimation(.easeOut(duration: 0.35)) { showSplash = false }
-        }
     }
-}
 
-/// Écran de démarrage : logo PeachTV+ centré sur fond noir OLED, estompé après ~1,2 s.
-/// (L'écran de lancement **système** est un simple fond noir — voir `UILaunchScreen` ; ce
-/// splash SwiftUI ajoute le logo de marque, faute de splash vidéo pour l'instant.)
-struct SplashView: View {
-    var body: some View {
-        ZStack {
-            Theme.background.ignoresSafeArea()
-            Image("Logo")
-                .resizable()
-                .scaledToFit()
-                .frame(width: 180, height: 180)
-                .accessibilityLabel("PeachTV+")
-        }
+    private func finishSplash() {
+        guard showSplash else { return }
+        withAnimation(.easeOut(duration: 0.35)) { showSplash = false }
     }
 }

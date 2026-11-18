@@ -26,8 +26,10 @@ struct PlayerView: View {
     let request: PlaybackRequest
     var nowNext: NowNext? = nil
     var onClose: () -> Void = {}
-    /// Direct uniquement : glissement horizontal → ±1 chaîne. L'appelant (M5) change la requête.
+    /// Direct uniquement : glissement horizontal → ±1 chaîne. L'appelant change la chaîne courante.
     var onChangeChannel: (Int) -> Void = { _ in }
+    /// Direct : logo de la chaîne, affiché dans le bandeau 5 s au (re)lancement d'une chaîne.
+    var channelLogoURL: String? = nil
 
     @StateObject private var coordinator = PlaybackCoordinator()
     @StateObject private var volume = SystemVolumeController()
@@ -37,6 +39,7 @@ struct PlayerView: View {
     @State private var currentTime: Double = 0
     @State private var duration: Double = 0
     @State private var isScrubbing = false
+    @State private var showChannelBadge = false
 
     // HUD volume/luminosité
     @State private var hud: HUD?
@@ -68,6 +71,10 @@ struct PlayerView: View {
                         .transition(.opacity)
                 }
 
+                if request.isLive, showChannelBadge {
+                    channelBadge.transition(.opacity)
+                }
+
                 if isBuffering {
                     ProgressView()
                         .progressViewStyle(.circular)
@@ -89,6 +96,7 @@ struct PlayerView: View {
             baselineBrightness = Double(UIScreen.main.brightness)
             coordinator.play(url: request.url, isLive: request.isLive, profile: request.profile)
             scheduleAutoHide()
+            if request.isLive { showChannelBadgeTemporarily() }
         }
         .onDisappear { coordinator.stop() }
         .onReceive(ticker) { _ in refreshProgress() }
@@ -338,12 +346,45 @@ struct PlayerView: View {
             withAnimation { controlsVisible = false }
         }
         hideWorkItem = work
-        DispatchQueue.main.asyncAfter(deadline: .now() + 4, execute: work)
+        DispatchQueue.main.asyncAfter(deadline: .now() + 7, execute: work)
     }
 
     private func refreshProgress() {
         guard !request.isLive, !isScrubbing else { return }
         if let d = coordinator.durationSeconds { duration = d }
         if let t = coordinator.currentTimeSeconds { currentTime = t }
+    }
+
+    // MARK: - Bandeau chaîne (Direct) : logo + nom + émission en cours, ~5 s au changement
+
+    private func showChannelBadgeTemporarily() {
+        withAnimation { showChannelBadge = true }
+        let work = DispatchWorkItem { withAnimation { showChannelBadge = false } }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 5, execute: work)
+    }
+
+    private var channelBadge: some View {
+        VStack {
+            Spacer()
+            HStack(alignment: .bottom) {
+                HStack(spacing: 10) {
+                    if let u = channelLogoURL.flatMap({ URL(string: $0) }) {
+                        AsyncImage(url: u) { img in img.resizable().scaledToFit() } placeholder: { Color.clear }
+                            .frame(width: 40, height: 40)
+                    }
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(request.title).font(.headline).foregroundStyle(.white).lineLimit(1)
+                        if let now = nowNext?.now, !now.isEmpty {
+                            Text(now).font(.caption).foregroundStyle(.white.opacity(0.85)).lineLimit(1)
+                        }
+                    }
+                }
+                .padding(10)
+                .background(.black.opacity(0.6), in: RoundedRectangle(cornerRadius: 12))
+                Spacer(minLength: 0)
+            }
+        }
+        .padding()
+        .allowsHitTesting(false)
     }
 }
