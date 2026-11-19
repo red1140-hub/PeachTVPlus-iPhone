@@ -10,8 +10,9 @@ final class LiveViewModel: ObservableObject {
     @Published private(set) var favoriteIds: Set<String> = []
     @Published private(set) var hiddenIds: Set<String> = []
 
-    /// Catégorie synthétique « Favoris » (comme Android, `"__fav__"`).
+    /// Catégories synthétiques : « Favoris » et « Toutes » (ids sentinelles).
     static let favoritesCategoryId = "__fav__"
+    static let allId = "__all__"
 
     private let container: AppContainer
     private var hasLoaded = false
@@ -70,7 +71,8 @@ final class LiveViewModel: ObservableObject {
             let every = (try? container.catalogStore.liveChannels(categoryId: nil, limit: 5000)) ?? []
             source = every.filter { favoriteIds.contains($0.id) }
         } else {
-            source = (try? container.catalogStore.liveChannels(categoryId: selectedCategoryId, limit: 1000)) ?? []
+            let cid = (selectedCategoryId == Self.allId) ? nil : selectedCategoryId
+            source = (try? container.catalogStore.liveChannels(categoryId: cid, limit: 1000)) ?? []
         }
         channels = source.filter { !hiddenIds.contains($0.id) }   // on masque les chaînes cachées
     }
@@ -94,20 +96,21 @@ final class LiveViewModel: ObservableObject {
         loadFavHidden(); reloadChannels()
     }
 
-    /// Catégories du menu déroulant, « Favoris » en tête si au moins un favori.
+    /// Catégories du menu : « Favoris » (si favoris), « Toutes », puis les catégories réelles.
     var menuCategories: [Category] {
         var out: [Category] = []
         if !favoriteIds.isEmpty {
             out.append(Category(id: Self.favoritesCategoryId, name: "★ Favoris", contentType: .live))
         }
+        out.append(Category(id: Self.allId, name: "Toutes les chaînes", contentType: .live))
         out.append(contentsOf: categories)
         return out
     }
 
     var selectedCategoryName: String {
         if selectedCategoryId == Self.favoritesCategoryId { return "★ Favoris" }
-        guard let id = selectedCategoryId else { return "Toutes les chaînes" }
-        return categories.first { $0.id == id }?.name ?? "Catégorie"
+        if selectedCategoryId == nil || selectedCategoryId == Self.allId { return "Toutes les chaînes" }
+        return categories.first { $0.id == selectedCategoryId }?.name ?? "Catégorie"
     }
 
     /// Catégorie par défaut = **« Québec » exact** (nom nettoyé des emojis/accents == « quebec »),
@@ -146,13 +149,15 @@ struct LiveView: View {
         NavigationStack {
             VStack(spacing: 0) {
                 if !vm.categories.isEmpty {
-                    categoryDropdown
+                    CategoryDropdown(selectedName: vm.selectedCategoryName,
+                                     entries: vm.menuCategories,
+                                     selectedId: vm.selectedCategoryId,
+                                     onSelect: { vm.select($0) })
                     Divider()
                 }
                 content
             }
-            .navigationTitle("Direct")
-            .navigationBarTitleDisplayMode(.inline)
+            .toolbar(.hidden, for: .navigationBar)
             .task { await vm.loadInitial() }
             .fullScreenCover(item: $presentation, onDismiss: { vm.refreshState() }) { p in
                 LivePlayerView(channels: vm.channels, startIndex: p.index,
@@ -209,36 +214,6 @@ struct LiveView: View {
         }
         .listStyle(.plain)
         .refreshable { await vm.refresh() }
-    }
-
-    /// Sélecteur de catégories en **liste déroulante** (comme Android), visible en tête de liste.
-    private var categoryDropdown: some View {
-        Menu {
-            ForEach(vm.menuCategories) { cat in
-                Button { vm.select(cat.id) } label: {
-                    if vm.selectedCategoryId == cat.id {
-                        Label(cat.name, systemImage: "checkmark")
-                    } else {
-                        Text(cat.name)
-                    }
-                }
-            }
-            Divider()
-            Button("Toutes les chaînes") { vm.select(nil) }
-        } label: {
-            HStack(spacing: 8) {
-                Image(systemName: "line.3.horizontal.decrease.circle")
-                Text(vm.selectedCategoryName).lineLimit(1)
-                Spacer()
-                Image(systemName: "chevron.down").font(.caption)
-            }
-            .font(.subheadline.weight(.medium))
-            .foregroundStyle(.primary)
-            .padding(.horizontal, 14).padding(.vertical, 10)
-            .frame(maxWidth: .infinity)
-            .contentShape(Rectangle())
-        }
-        .background(Color(white: 0.12))
     }
 
     @ViewBuilder private var emptyState: some View {

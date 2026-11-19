@@ -4,16 +4,23 @@ import SwiftUI
 final class MoviesViewModel: ObservableObject {
     @Published var categories: [Category] = []
     @Published var movies: [Movie] = []
-    @Published var selectedCategoryId: String?
+    @Published var selectedCategoryId: String? = MoviesViewModel.allId   // défaut = « Tous »
     @Published var isLoading = false
     /// Cause réelle d'un catalogue vide (voir correctif ①), `nil` si tout va bien.
     @Published var syncError: String?
 
+    static let allId = "__all__"
+    static let favId = "__fav__"
+    static let revoirId = "__revoir__"
+
     private let container: AppContainer
+    private var hasLoaded = false
     init(container: AppContainer) { self.container = container }
 
+    private var playlistId: String? { container.repository.activePlaylist?.id }
+
     func loadInitial() async {
-        guard movies.isEmpty else { return }
+        guard !hasLoaded else { return }
         isLoading = true
         defer { isLoading = false }
         var cats = (try? container.catalogStore.categories(type: .vod)) ?? []
@@ -23,8 +30,8 @@ final class MoviesViewModel: ObservableObject {
             cats = (try? container.catalogStore.categories(type: .vod)) ?? []
         }
         categories = cats
-        if selectedCategoryId == nil { selectedCategoryId = Self.defaultCategory(cats)?.id }
         reload()
+        if !cats.isEmpty { hasLoaded = true }
     }
 
     func refresh() async {
@@ -38,19 +45,58 @@ final class MoviesViewModel: ObservableObject {
 
     func select(_ id: String?) { selectedCategoryId = id; reload() }
 
+    /// Au retour (favoris cochés / films visionnés ont pu changer).
+    func reloadState() { reload() }
+
     private func reload() {
-        movies = (try? container.catalogStore.movies(categoryId: selectedCategoryId, limit: 300)) ?? []
+        switch selectedCategoryId {
+        case Self.favId:    movies = favoriteMovies()
+        case Self.revoirId: movies = recentlyWatchedMovies()
+        case nil, Self.allId:
+            movies = (try? container.catalogStore.movies(categoryId: nil, limit: 500)) ?? []
+        default:
+            movies = (try? container.catalogStore.movies(categoryId: selectedCategoryId, limit: 500)) ?? []
+        }
+    }
+
+    /// Films cochés **Favoris** (reconstitués depuis la table favoris, scopée à la liste active).
+    private func favoriteMovies() -> [Movie] {
+        guard let pid = playlistId else { return [] }
+        let favs = (try? container.catalogStore.favorites(playlistId: pid, contentType: .vod)) ?? []
+        return favs.map { Movie(id: $0.itemId, name: $0.name ?? $0.itemId, posterURL: $0.posterURL,
+                                categoryId: nil, containerExtension: nil, rating: nil) }
+    }
+
+    /// Films **visionnés**, du plus récent au plus ancien (positions de lecture VOD).
+    private func recentlyWatchedMovies() -> [Movie] {
+        let positions = (try? container.catalogStore.recentPositions(limit: 50)) ?? []
+        return positions
+            .filter { $0.contentType == ContentType.vod.rawValue }
+            .map { pos in
+                let id = pos.contentKey.hasPrefix("movie:") ? String(pos.contentKey.dropFirst(6)) : pos.contentKey
+                return Movie(id: id, name: pos.title ?? id, posterURL: pos.posterURL,
+                             categoryId: nil, containerExtension: nil, rating: nil)
+            }
+    }
+
+    /// Menu : « Favoris » (#1), « Revoir » (#2), « Tous », puis les catégories réelles.
+    var menuCategories: [Category] {
+        var out: [Category] = [
+            Category(id: Self.favId, name: "★ Favoris", contentType: .vod),
+            Category(id: Self.revoirId, name: "↺ Revoir", contentType: .vod),
+            Category(id: Self.allId, name: "Tous", contentType: .vod)
+        ]
+        out.append(contentsOf: categories)
+        return out
     }
 
     var selectedCategoryName: String {
-        guard let id = selectedCategoryId else { return "Tous les films" }
-        return categories.first { $0.id == id }?.name ?? "Catégorie"
-    }
-
-    /// Catégorie par défaut présélectionnée = « À l'affiche » (nom contenant « affiche »),
-    /// sinon la première. Reprise du `defaultCatalogCategory` Android. Partagée avec les Séries.
-    static func defaultCategory(_ cats: [Category]) -> Category? {
-        cats.first { $0.name.localizedCaseInsensitiveContains("affiche") } ?? cats.first
+        switch selectedCategoryId {
+        case Self.favId:        return "★ Favoris"
+        case Self.revoirId:     return "↺ Revoir"
+        case nil, Self.allId:   return "Tous"
+        default:                return categories.first { $0.id == selectedCategoryId }?.name ?? "Catégorie"
+        }
     }
 }
 
@@ -69,17 +115,17 @@ struct MoviesView: View {
         NavigationStack {
             VStack(spacing: 0) {
                 if !vm.categories.isEmpty {
-                    CategoryChips(categories: vm.categories,
-                                  selectedId: vm.selectedCategoryId,
-                                  allLabel: "Tous",
-                                  onSelect: { vm.select($0) })
+                    CategoryDropdown(selectedName: vm.selectedCategoryName,
+                                     entries: vm.menuCategories,
+                                     selectedId: vm.selectedCategoryId,
+                                     onSelect: { vm.select($0) })
                     Divider()
                 }
                 content
             }
-            .navigationTitle("Films")
-            .navigationBarTitleDisplayMode(.inline)
+            .toolbar(.hidden, for: .navigationBar)
             .task { await vm.loadInitial() }
+            .onAppear { vm.reloadState() }
         }
     }
 

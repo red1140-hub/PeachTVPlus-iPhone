@@ -1,8 +1,8 @@
 import SwiftUI
 
-/// **Accueil** : en-tête à sous-onglets **Direct / Films / Séries** (segmenté + glissé horizontal)
-/// avec le logo à droite, reproduisant l'en-tête de l'app Android. Chaque section conserve sa
-/// propre pile de navigation (`NavigationStack`) et sa barre d'outils (catégories).
+/// **Accueil** : en-tête à sous-onglets **Direct / Films / Séries** (onglets maison, plus étroits
+/// et plus hauts, glissé horizontal) avec le logo agrandi à droite. Chaque section conserve sa
+/// propre pile de navigation et masque sa barre (le nom de section n'est plus répété sous l'en-tête).
 struct HomeView: View {
     let container: AppContainer
     @State private var section = 0
@@ -10,17 +10,13 @@ struct HomeView: View {
     var body: some View {
         VStack(spacing: 0) {
             HStack(spacing: 12) {
-                Picker("Section", selection: $section) {
-                    Text("Direct").tag(0)
-                    Text("Films").tag(1)
-                    Text("Séries").tag(2)
-                }
-                .pickerStyle(.segmented)
-
+                SectionTabs(selection: $section)
+                    .frame(maxWidth: 270)        // largeur réduite pour les onglets
+                Spacer(minLength: 4)
                 Image("Logo")
                     .resizable()
                     .scaledToFit()
-                    .frame(height: 30)
+                    .frame(height: 46)            // logo agrandi (~+50 %)
                     .accessibilityHidden(true)
             }
             .padding(.horizontal, 12)
@@ -34,6 +30,31 @@ struct HomeView: View {
                 SeriesListView(container: container).tag(2)
             }
             .tabViewStyle(.page(indexDisplayMode: .never))
+        }
+    }
+}
+
+/// Onglets Direct / Films / Séries maison : hauteur confortable, actif en accent néon.
+private struct SectionTabs: View {
+    @Binding var selection: Int
+    private let items = ["Direct", "Films", "Séries"]
+
+    var body: some View {
+        HStack(spacing: 6) {
+            ForEach(items.indices, id: \.self) { i in
+                Button {
+                    withAnimation(.easeInOut(duration: 0.15)) { selection = i }
+                } label: {
+                    Text(items[i])
+                        .font(.subheadline.weight(.semibold))
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 11)      // hauteur accrue
+                        .background(selection == i ? Theme.accent : Color(white: 0.15),
+                                    in: RoundedRectangle(cornerRadius: 10))
+                        .foregroundStyle(selection == i ? Color.black : Color.primary)
+                }
+                .buttonStyle(.plain)
+            }
         }
     }
 }
