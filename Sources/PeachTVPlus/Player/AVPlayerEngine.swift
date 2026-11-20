@@ -31,6 +31,11 @@ final class AVPlayerEngine: VideoEngine {
     private var timeControlObs: NSKeyValueObservation?
     private var isLive = false
 
+    /// Groupes de sélection chargés **de façon asynchrone** quand l'item devient lisible
+    /// (API non dépréciée `loadMediaSelectionGroup(for:)`), puis mis en cache pour des accès synchrones.
+    private var audioGroup: AVMediaSelectionGroup?
+    private var legibleGroup: AVMediaSelectionGroup?
+
     init() {
         player.automaticallyWaitsToMinimizeStalling = true
     }
@@ -63,6 +68,7 @@ final class AVPlayerEngine: VideoEngine {
         player.pause()
         player.replaceCurrentItem(with: nil)
         itemStatusObs?.invalidate(); itemStatusObs = nil
+        audioGroup = nil; legibleGroup = nil
         setState(.idle)
     }
 
@@ -79,6 +85,54 @@ final class AVPlayerEngine: VideoEngine {
     var durationSeconds: Double? {
         guard let d = player.currentItem?.duration.seconds, d.isFinite, d > 0 else { return nil }
         return d
+    }
+
+    // MARK: - Pistes audio / sous-titres (via groupes de sélection média)
+
+    var audioTracks: [MediaTrack] {
+        guard let g = audioGroup else { return [] }
+        return g.options.enumerated().map { MediaTrack(id: $0.offset, name: $0.element.displayName, kind: .audio) }
+    }
+
+    var subtitleTracks: [MediaTrack] {
+        guard let g = legibleGroup else { return [] }
+        return g.options.enumerated().map { MediaTrack(id: $0.offset, name: $0.element.displayName, kind: .subtitle) }
+    }
+
+    var currentAudioTrackId: Int? { selectedIndex(in: audioGroup) }
+    var currentSubtitleTrackId: Int? { selectedIndex(in: legibleGroup) }
+
+    func selectAudioTrack(_ id: Int) {
+        guard let item = player.currentItem, let g = audioGroup, g.options.indices.contains(id) else { return }
+        item.selectMediaOption(g.options[id], in: g)
+    }
+
+    func selectSubtitleTrack(_ id: Int?) {
+        guard let item = player.currentItem, let g = legibleGroup else { return }
+        if let id, g.options.indices.contains(id) {
+            item.selectMediaOption(g.options[id], in: g)
+        } else {
+            item.selectMediaOption(nil, in: g)   // désactive les sous-titres
+        }
+    }
+
+    private func selectedIndex(in group: AVMediaSelectionGroup?) -> Int? {
+        guard let item = player.currentItem, let group,
+              let sel = item.currentMediaSelection.selectedMediaOption(in: group),
+              let idx = group.options.firstIndex(of: sel) else { return nil }
+        return idx
+    }
+
+    private func loadSelectionGroups(for item: AVPlayerItem) {
+        let asset = item.asset
+        Task { [weak self] in
+            let audio = try? await asset.loadMediaSelectionGroup(for: .audible)
+            let legible = try? await asset.loadMediaSelectionGroup(for: .legible)
+            await MainActor.run {
+                self?.audioGroup = audio
+                self?.legibleGroup = legible
+            }
+        }
     }
 
     #if canImport(UIKit)
@@ -107,7 +161,9 @@ final class AVPlayerEngine: VideoEngine {
                 guard let self else { return }
                 switch status {
                 case .failed:       self.setState(.failed(Self.mapError(error)))
-                case .readyToPlay:  if self.state == .preparing { self.setState(.buffering) }
+                case .readyToPlay:
+                    if self.state == .preparing { self.setState(.buffering) }
+                    self.loadSelectionGroups(for: item)
                 default:            break
                 }
             }

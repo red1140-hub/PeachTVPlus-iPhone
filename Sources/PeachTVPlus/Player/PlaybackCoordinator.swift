@@ -103,6 +103,15 @@ final class PlaybackCoordinator: ObservableObject {
     var currentTimeSeconds: Double? { engine?.currentTimeSeconds }
     var durationSeconds: Double? { engine?.durationSeconds }
 
+    // MARK: - Pistes audio / sous-titres (relayées au moteur courant)
+
+    var audioTracks: [MediaTrack] { engine?.audioTracks ?? [] }
+    var subtitleTracks: [MediaTrack] { engine?.subtitleTracks ?? [] }
+    var currentAudioTrackId: Int? { engine?.currentAudioTrackId }
+    var currentSubtitleTrackId: Int? { engine?.currentSubtitleTrackId }
+    func selectAudioTrack(_ id: Int) { engine?.selectAudioTrack(id) }
+    func selectSubtitleTrack(_ id: Int?) { engine?.selectSubtitleTrack(id) }
+
     // MARK: - Démarrage d'un moteur
 
     private func start(kind: PlaybackEngineKind) {

@@ -42,6 +42,7 @@ struct PlayerView: View {
     @State private var duration: Double = 0
     @State private var isScrubbing = false
     @State private var showChannelBadge = false
+    @State private var showHelp = false
 
     // HUD volume/luminosité
     @State private var hud: HUD?
@@ -102,6 +103,7 @@ struct PlayerView: View {
         }
         .onDisappear { coordinator.stop() }
         .onReceive(ticker) { _ in refreshProgress() }
+        .sheet(isPresented: $showHelp) { helpSheet }
     }
 
     // MARK: - Dérivés d'état
@@ -166,6 +168,9 @@ struct PlayerView: View {
             }
             Spacer(minLength: 0)
 
+            if !request.isLive { trackMenu }
+            helpButton
+
             if request.isLive, let onShowGuide {
                 Button(action: onShowGuide) {
                     Image(systemName: "list.bullet.rectangle")
@@ -174,6 +179,90 @@ struct PlayerView: View {
                         .frame(width: 44, height: 44)
                 }
                 .accessibilityLabel("Guide horaire")
+            }
+        }
+    }
+
+    /// Sélecteur **audio / sous-titres** (VOD). Lit les pistes du moteur courant à l'ouverture
+    /// du menu ; les pistes AVPlayer se chargent peu après « prêt à lire », d'où le repli.
+    private var trackMenu: some View {
+        Menu {
+            let audio = coordinator.audioTracks
+            let subs = coordinator.subtitleTracks
+            if audio.isEmpty && subs.isEmpty {
+                Text("Aucune piste disponible")
+            } else {
+                if !audio.isEmpty {
+                    Section("Audio") {
+                        ForEach(audio) { t in
+                            Button { coordinator.selectAudioTrack(t.id) } label: {
+                                trackLabel(t.name, selected: coordinator.currentAudioTrackId == t.id)
+                            }
+                        }
+                    }
+                }
+                Section("Sous-titres") {
+                    Button { coordinator.selectSubtitleTrack(nil) } label: {
+                        trackLabel("Désactivés", selected: coordinator.currentSubtitleTrackId == nil)
+                    }
+                    ForEach(subs) { t in
+                        Button { coordinator.selectSubtitleTrack(t.id) } label: {
+                            trackLabel(t.name, selected: coordinator.currentSubtitleTrackId == t.id)
+                        }
+                    }
+                }
+            }
+        } label: {
+            Image(systemName: "captions.bubble")
+                .font(.title3.weight(.semibold))
+                .foregroundStyle(.white)
+                .frame(width: 44, height: 44)
+        }
+        .accessibilityLabel("Audio et sous-titres")
+    }
+
+    @ViewBuilder private func trackLabel(_ name: String, selected: Bool) -> some View {
+        if selected { Label(name, systemImage: "checkmark") } else { Text(name) }
+    }
+
+    private var helpButton: some View {
+        Button { showHelp = true } label: {
+            Image(systemName: "info.circle")
+                .font(.title3.weight(.semibold))
+                .foregroundStyle(.white)
+                .frame(width: 44, height: 44)
+        }
+        .accessibilityLabel("Aide : gestes")
+    }
+
+    /// Feuille d'aide : rend visibles les gestes « invisibles » du lecteur.
+    private var helpSheet: some View {
+        NavigationStack {
+            List {
+                Section("Gestes du lecteur") {
+                    gestureRow("hand.tap", "Toucher l'écran", "Afficher ou masquer les contrôles")
+                    gestureRow("speaker.wave.2", "Glisser haut/bas à droite", "Régler le volume")
+                    gestureRow("sun.max", "Glisser haut/bas à gauche", "Régler la luminosité")
+                    if request.isLive {
+                        gestureRow("arrow.left.arrow.right", "Glisser gauche/droite", "Chaîne précédente / suivante")
+                    } else {
+                        gestureRow("slider.horizontal.3", "Barre de progression", "Avancer ou reculer dans la vidéo")
+                    }
+                }
+            }
+            .navigationTitle("Aide")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar { ToolbarItem(placement: .confirmationAction) { Button("OK") { showHelp = false } } }
+        }
+        .presentationDetents([.medium])
+    }
+
+    private func gestureRow(_ icon: String, _ title: String, _ subtitle: String) -> some View {
+        HStack(spacing: 12) {
+            Image(systemName: icon).frame(width: 30).foregroundStyle(Theme.accent)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title).font(.subheadline.weight(.semibold))
+                Text(subtitle).font(.caption).foregroundStyle(.secondary)
             }
         }
     }

@@ -69,6 +69,33 @@ final class VLCPlayerEngine: NSObject, VideoEngine {
         return ms > 0 ? Double(ms) / 1000 : nil
     }
 
+    // MARK: - Pistes audio / sous-titres (index VLC)
+
+    var audioTracks: [MediaTrack] {
+        zip(intArray(player.audioTrackIndexes), strArray(player.audioTrackNames))
+            .map { MediaTrack(id: $0.0, name: $0.1, kind: .audio) }
+    }
+
+    var subtitleTracks: [MediaTrack] {
+        // On retire l'entrée « Disable » (index -1) de VLC : la désactivation est offerte à part.
+        zip(intArray(player.videoSubTitlesIndexes), strArray(player.videoSubTitlesNames))
+            .filter { $0.0 >= 0 }
+            .map { MediaTrack(id: $0.0, name: $0.1, kind: .subtitle) }
+    }
+
+    var currentAudioTrackId: Int? {
+        let i = Int(player.currentAudioTrackIndex); return i >= 0 ? i : nil
+    }
+    var currentSubtitleTrackId: Int? {
+        let i = Int(player.currentVideoSubTitleIndex); return i >= 0 ? i : nil
+    }
+
+    func selectAudioTrack(_ id: Int) { player.currentAudioTrackIndex = Int32(id) }
+    func selectSubtitleTrack(_ id: Int?) { player.currentVideoSubTitleIndex = Int32(id ?? -1) }
+
+    private func intArray(_ a: [Any]?) -> [Int] { (a ?? []).compactMap { ($0 as? NSNumber)?.intValue } }
+    private func strArray(_ a: [Any]?) -> [String] { (a ?? []).map { "\($0)" } }
+
     #if canImport(UIKit)
     func attach(to view: UIView) {
         player.drawable = view
