@@ -137,12 +137,22 @@ struct LivePresentation: Identifiable {
 
 struct LiveView: View {
     @StateObject private var vm: LiveViewModel
-    @State private var presentation: LivePresentation?
+    @State private var presentation: LivePresentation?     // lecture Direct (par index)
+    @State private var catchup: PlayerPresentation?        // rattrapage lancé depuis la grille
+    @State private var selectedId: String?                 // chaîne dont on affiche la grille
+    @Environment(\.horizontalSizeClass) private var hSize
     private let container: AppContainer
 
     init(container: AppContainer) {
         self.container = container
         _vm = StateObject(wrappedValue: LiveViewModel(container: container))
+    }
+
+    /// Colonne de chaînes plus large sur iPad / paysage, compacte sur iPhone portrait.
+    private var columnWidth: CGFloat { hSize == .regular ? 190 : 122 }
+
+    private var selectedChannel: LiveChannel? {
+        vm.channels.first { $0.id == selectedId }
     }
 
     var body: some View {
@@ -152,18 +162,29 @@ struct LiveView: View {
                     CategoryDropdown(selectedName: vm.selectedCategoryName,
                                      entries: vm.menuCategories,
                                      selectedId: vm.selectedCategoryId,
-                                     onSelect: { vm.select($0) })
+                                     onSelect: { vm.select($0); syncSelection() })
                     Divider()
                 }
                 content
             }
             .toolbar(.hidden, for: .navigationBar)
-            .task { await vm.loadInitial() }
+            .task { await vm.loadInitial(); syncSelection() }
+            .onChange(of: vm.channels) { _, _ in syncSelection() }
             .fullScreenCover(item: $presentation, onDismiss: { vm.refreshState() }) { p in
                 LivePlayerView(channels: vm.channels, startIndex: p.index,
                                container: container, onClose: { presentation = nil })
             }
+            .fullScreenCover(item: $catchup) { p in
+                PlayerView(request: p.request, onClose: { catchup = nil })
+            }
         }
+    }
+
+    /// Garde la chaîne sélectionnée valide : conserve l'actuelle si encore présente, sinon
+    /// retombe sur la première de la liste filtrée.
+    private func syncSelection() {
+        if let id = selectedId, vm.channels.contains(where: { $0.id == id }) { return }
+        selectedId = vm.channels.first?.id
     }
 
     @ViewBuilder private var content: some View {
@@ -173,47 +194,102 @@ struct LiveView: View {
         } else if vm.channels.isEmpty {
             emptyState
         } else {
-            channelList
+            HStack(spacing: 0) {
+                channelColumn
+                    .frame(width: columnWidth)
+                    .background(Color(white: 0.06))
+                Divider()
+                epgPanel
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+            }
         }
     }
 
-    private var channelList: some View {
-        List(vm.channels) { channel in
-            Button {
-                if let idx = vm.channels.firstIndex(of: channel) {
-                    presentation = LivePresentation(index: idx)
-                }
-            } label: {
-                HStack(spacing: 12) {
-                    ChannelLogo(url: channel.iconURL).frame(width: 44, height: 44)
-                    Text(channel.name).lineLimit(1)
-                    Spacer()
-                    if vm.isFavorite(channel) {
-                        Image(systemName: "star.fill").foregroundStyle(Theme.ratingStar).font(.caption)
-                    }
-                    if channel.hasArchive {
-                        Image(systemName: "clock.arrow.circlepath")
-                            .foregroundStyle(Theme.archiveBadge)
-                            .accessibilityLabel("Rattrapage disponible")
-                    }
+    // MARK: Colonne de chaînes (boutons : logo fixe + nom déroulant)
+
+    private var channelColumn: some View {
+        ScrollView {
+            LazyVStack(spacing: 6) {
+                ForEach(vm.channels) { channel in
+                    channelCell(channel)
                 }
             }
-            .contextMenu {
-                Button {
-                    vm.toggleFavorite(channel)
-                } label: {
-                    Label(vm.isFavorite(channel) ? "Retirer des favoris" : "Ajouter aux favoris",
-                          systemImage: vm.isFavorite(channel) ? "star.slash" : "star")
+            .padding(.horizontal, 6)
+            .padding(.vertical, 8)
+        }
+        .refreshable { await vm.refresh() }
+    }
+
+    private func channelCell(_ channel: LiveChannel) -> some View {
+        let isSelected = channel.id == selectedId
+        return Button {
+            selectedId = channel.id
+        } label: {
+            VStack(spacing: 5) {
+                ChannelLogo(url: channel.iconURL)
+                    .frame(width: 46, height: 46)
+                    .overlay(alignment: .topTrailing) {
+                        if vm.isFavorite(channel) {
+                            Image(systemName: "star.fill")
+                                .font(.system(size: 9)).foregroundStyle(Theme.ratingStar)
+                                .padding(2).background(.black.opacity(0.6), in: Circle())
+                                .offset(x: 4, y: -4)
+                        }
+                    }
+                MarqueeText(text: channel.name, font: .caption)
+                    .frame(maxWidth: .infinity)
+                if channel.hasArchive {
+                    Image(systemName: "clock.arrow.circlepath")
+                        .font(.system(size: 9)).foregroundStyle(Theme.archiveBadge)
+                        .accessibilityLabel("Rattrapage disponible")
                 }
-                Button(role: .destructive) {
-                    vm.hide(channel)
-                } label: {
-                    Label("Cacher la chaîne", systemImage: "eye.slash")
-                }
+            }
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 8)
+            .padding(.horizontal, 4)
+            .background(isSelected ? Theme.accent.opacity(0.22) : Color.white.opacity(0.04),
+                        in: RoundedRectangle(cornerRadius: 10))
+            .overlay(
+                RoundedRectangle(cornerRadius: 10)
+                    .stroke(isSelected ? Theme.accent : Color.clear, lineWidth: 1.5)
+            )
+        }
+        .buttonStyle(.plain)
+        .contextMenu {
+            Button {
+                vm.toggleFavorite(channel)
+            } label: {
+                Label(vm.isFavorite(channel) ? "Retirer des favoris" : "Ajouter aux favoris",
+                      systemImage: vm.isFavorite(channel) ? "star.slash" : "star")
+            }
+            Button(role: .destructive) {
+                vm.hide(channel)
+            } label: {
+                Label("Cacher la chaîne", systemImage: "eye.slash")
             }
         }
-        .listStyle(.plain)
-        .refreshable { await vm.refresh() }
+    }
+
+    // MARK: Panneau de droite — grille horaire de la chaîne sélectionnée
+
+    @ViewBuilder private var epgPanel: some View {
+        if let channel = selectedChannel {
+            ChannelEpgPanel(
+                channel: channel,
+                container: container,
+                onWatchLive: {
+                    if let idx = vm.channels.firstIndex(of: channel) {
+                        presentation = LivePresentation(index: idx)
+                    }
+                },
+                onCatchup: { catchup = PlayerPresentation(request: $0) }
+            )
+            .id(channel.id)
+        } else {
+            ContentUnavailableView("Choisissez une chaîne",
+                                   systemImage: "hand.tap",
+                                   description: Text("La grille horaire s'affiche ici."))
+        }
     }
 
     @ViewBuilder private var emptyState: some View {
@@ -230,6 +306,66 @@ struct LiveView: View {
                                    systemImage: "tv",
                                    description: Text("Tirez pour rafraîchir le catalogue."))
         }
+    }
+}
+
+/// Panneau **grille horaire** d'une chaîne (à droite du Direct). Charge l'EPG du jour **à la
+/// demande** (`fullEpg`), met en tête la chaîne + un bouton **Regarder**, surligne l'émission
+/// en cours, et offre le **rattrapage** sur les émissions passées (chaîne à archive).
+private struct ChannelEpgPanel: View {
+    let channel: LiveChannel
+    let container: AppContainer
+    var onWatchLive: () -> Void
+    var onCatchup: (PlaybackRequest) -> Void
+
+    @State private var programmes: [EpgProgramme] = []
+    @State private var isLoading = true
+
+    var body: some View {
+        VStack(spacing: 0) {
+            header
+            Divider()
+            Group {
+                if isLoading {
+                    ProgressView("Chargement du guide…")
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                } else if programmes.isEmpty {
+                    ContentUnavailableView("Guide indisponible",
+                                           systemImage: "calendar",
+                                           description: Text("Aucune donnée horaire pour cette chaîne."))
+                } else {
+                    List(programmes) { prog in
+                        EpgProgrammeRow(prog: prog, channel: channel,
+                                        container: container, onCatchup: onCatchup)
+                    }
+                    .listStyle(.plain)
+                }
+            }
+        }
+        .task(id: channel.id) { await load() }
+    }
+
+    private var header: some View {
+        HStack(spacing: 12) {
+            ChannelLogo(url: channel.iconURL).frame(width: 40, height: 40)
+            Text(channel.name).font(.headline).lineLimit(2)
+            Spacer(minLength: 8)
+            Button(action: onWatchLive) {
+                Label("Regarder", systemImage: "play.fill")
+            }
+            .buttonStyle(.borderedProminent)
+            .controlSize(.small)
+            .tint(Theme.accent)
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 10)
+    }
+
+    private func load() async {
+        isLoading = true
+        let p = await container.repository.fullEpg(streamId: channel.id)
+        programmes = p.sorted { ($0.start ?? .distantPast) < ($1.start ?? .distantPast) }
+        isLoading = false
     }
 }
 
