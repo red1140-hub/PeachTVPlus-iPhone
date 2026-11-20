@@ -29,6 +29,9 @@ enum EpgFormat {
         return e <= Date()
     }
 
+    /// `@MainActor` : lit `container.activeFactory` (isolé au main actor). Appelée uniquement
+    /// depuis une action de bouton SwiftUI, donc déjà sur le main.
+    @MainActor
     static func catchupRequest(_ p: EpgProgramme, channel: LiveChannel,
                                container: AppContainer) -> PlaybackRequest? {
         guard let s = p.start, let e = p.end, let factory = container.activeFactory else { return nil }

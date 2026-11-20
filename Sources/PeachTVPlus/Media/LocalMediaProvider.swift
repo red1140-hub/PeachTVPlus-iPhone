@@ -64,6 +64,13 @@ final class LocalMediaProvider: MediaProvider {
         return resolved[id]
     }
 
+    /// Écriture synchrone de la table résolue. **Synchrone exprès** : `NSLock.lock()` est
+    /// interdit dans un contexte `async` (annoté `noasync`), donc on verrouille hors de
+    /// `listItems()` (qui est `async`).
+    private func commit(_ map: [String: Resolved]) {
+        lock.lock(); resolved = map; lock.unlock()
+    }
+
     init(store: LocalMediaStore) { self.store = store }
 
     // MARK: MediaProvider
@@ -93,7 +100,7 @@ final class LocalMediaProvider: MediaProvider {
             }
         }
 
-        lock.lock(); resolved = map; lock.unlock()
+        commit(map)
         return items.sorted { $0.title.localizedCaseInsensitiveCompare($1.title) == .orderedAscending }
     }
 
