@@ -37,6 +37,10 @@ final class AppContainer: ObservableObject {
     let downloadManager: DownloadManager
     let catalogSync: CatalogSyncService
 
+    /// Source de contenu **locale** (onglet « Appareil ») : signets des fichiers/dossiers
+    /// choisis par l'utilisateur. Légère, sans base ni réseau.
+    let localMediaStore = LocalMediaStore()
+
     private let vault = CredentialsVault()
 
     init(catalog: CatalogStore, downloads: DownloadStore, consent: CleartextConsent = CleartextConsent()) {
