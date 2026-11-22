@@ -62,6 +62,32 @@ final class SessionViewModel: ObservableObject {
         return false
     }
 
+    /// Édite une liste **existante** (adresse / utilisateur / mot de passe) sans la recréer.
+    /// Pas de requête réseau : les identifiants sont utilisés paresseusement (coffre + fabrique
+    /// d'URL) ; une erreur éventuelle apparaîtra à la prochaine lecture/synchro. `allowCleartext`
+    /// accorde le consentement HTTP si la nouvelle adresse est en clair.
+    @discardableResult
+    func updatePlaylist(oldId: String, server: String, username: String,
+                        password: String, allowCleartext: Bool = false) -> Bool {
+        errorMessage = nil
+        guard let creds = XtreamCredentials.normalize(server: server, username: username, password: password) else {
+            errorMessage = "Adresse de serveur invalide."
+            return false
+        }
+        if !creds.isSecure, let host = creds.host {
+            if container.consent.hasConsented(host: host) || allowCleartext {
+                container.consent.grant(host: host)
+            } else {
+                pendingCleartextHost = host
+                return false
+            }
+        }
+        repo.updatePlaylist(oldId: oldId, to: creds)
+        container.refreshVault()
+        refresh()
+        return true
+    }
+
     func switchTo(_ id: String) {
         repo.setActivePlaylist(id)
         container.refreshVault()

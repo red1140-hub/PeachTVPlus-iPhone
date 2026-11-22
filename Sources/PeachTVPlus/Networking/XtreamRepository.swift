@@ -64,6 +64,36 @@ final class XtreamRepository {
         store.save(state)
     }
 
+    /// Met à jour les identifiants d'une liste **existante, sans la recréer**.
+    /// - Mot de passe seul (ou adresse normalisée identique) → l'`id` dérivé ne change pas :
+    ///   favoris, chaînes masquées et cache catalogue **conservés**. Il suffit de resauvegarder
+    ///   (l'appelant rafraîchit le coffre d'identifiants pour les prochaines URLs de flux).
+    /// - Serveur ou utilisateur changé → l'`id` (dérivé de serveur+utilisateur) change : on
+    ///   remplace l'entrée **en place** (même position), on purge les données scopées à l'ancien
+    ///   id (devenues orphelines), et si la liste éditée était active on invalide le cache
+    ///   catalogue (la source est réellement différente).
+    func updatePlaylist(oldId: String, to credentials: XtreamCredentials) {
+        guard let index = state.items.firstIndex(where: { $0.id == oldId }) else { return }
+        let updated = Playlist(credentials: credentials)
+        let wasActive = (state.activeId == oldId)
+
+        state.items[index] = updated
+
+        if updated.id != oldId {
+            // Dédoublonnage par id (si l'édition fait coïncider la liste avec une autre déjà là).
+            var seen = Set<String>()
+            state.items = state.items.filter { seen.insert($0.id).inserted }
+            if wasActive { state.activeId = updated.id }
+
+            // Données scopées à l'ancien id → orphelines : on les purge.
+            do { try catalog?.purgePlaylist(oldId) }
+            catch { RedactingLogger.error("Purge liste (édition) échouée — \(error)") }
+
+            if wasActive { resetForSourceChange() }   // source différente → cache invalide
+        }
+        store.save(state)
+    }
+
     func setActivePlaylist(_ id: String) {
         guard state.activeId != id, state.items.contains(where: { $0.id == id }) else { return }
         state.activeId = id
