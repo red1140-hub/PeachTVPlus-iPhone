@@ -104,15 +104,15 @@ final class AVPlayerEngine: VideoEngine {
 
     func selectAudioTrack(_ id: Int) {
         guard let item = player.currentItem, let g = audioGroup, g.options.indices.contains(id) else { return }
-        item.selectMediaOption(g.options[id], in: g)
+        item.selectMediaOption(g.options[id], inMediaSelectionGroup: g)
     }
 
     func selectSubtitleTrack(_ id: Int?) {
         guard let item = player.currentItem, let g = legibleGroup else { return }
         if let id, g.options.indices.contains(id) {
-            item.selectMediaOption(g.options[id], in: g)
+            item.selectMediaOption(g.options[id], inMediaSelectionGroup: g)
         } else {
-            item.selectMediaOption(nil, in: g)   // désactive les sous-titres
+            item.selectMediaOption(nil, inMediaSelectionGroup: g)   // désactive les sous-titres
         }
     }
 
@@ -128,9 +128,10 @@ final class AVPlayerEngine: VideoEngine {
         Task { [weak self] in
             let audio = try? await asset.loadMediaSelectionGroup(for: .audible)
             let legible = try? await asset.loadMediaSelectionGroup(for: .legible)
-            await MainActor.run {
-                self?.audioGroup = audio
-                self?.legibleGroup = legible
+            await MainActor.run { [weak self] in
+                guard let self else { return }
+                self.audioGroup = audio
+                self.legibleGroup = legible
             }
         }
     }
