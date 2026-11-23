@@ -118,9 +118,9 @@ final class AVPlayerEngine: VideoEngine {
 
     private func selectedIndex(in group: AVMediaSelectionGroup?) -> Int? {
         guard let item = player.currentItem, let group,
-              let sel = item.currentMediaSelection.selectedMediaOption(in: group),
-              let idx = group.options.firstIndex(of: sel) else { return nil }
-        return idx
+              let sel = item.currentMediaSelection.selectedMediaOption(in: group) else { return nil }
+        // Comparaison d'identité (classe) — n'exige pas de conformité Equatable.
+        return group.options.firstIndex { $0 === sel }
     }
 
     private func loadSelectionGroups(for item: AVPlayerItem) {
