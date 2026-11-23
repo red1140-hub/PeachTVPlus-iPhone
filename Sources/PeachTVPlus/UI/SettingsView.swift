@@ -14,6 +14,7 @@ struct SettingsView: View {
                 playlistsSection
                 securitySection
                 catalogSection
+                channelsSection
                 aboutSection
                 accountSection
             }
@@ -101,6 +102,16 @@ struct SettingsView: View {
                 }
             }
             .disabled(isSyncing)
+        }
+    }
+
+    private var channelsSection: some View {
+        Section("Chaînes") {
+            NavigationLink {
+                HiddenChannelsView(container: container)
+            } label: {
+                Label("Chaînes cachées", systemImage: "eye.slash")
+            }
         }
     }
 
