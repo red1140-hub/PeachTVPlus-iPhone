@@ -104,15 +104,15 @@ final class AVPlayerEngine: VideoEngine {
 
     func selectAudioTrack(_ id: Int) {
         guard let item = player.currentItem, let g = audioGroup, g.options.indices.contains(id) else { return }
-        item.selectMediaOption(g.options[id], inMediaSelectionGroup: g)
+        item.select(g.options[id], in: g)
     }
 
     func selectSubtitleTrack(_ id: Int?) {
         guard let item = player.currentItem, let g = legibleGroup else { return }
         if let id, g.options.indices.contains(id) {
-            item.selectMediaOption(g.options[id], inMediaSelectionGroup: g)
+            item.select(g.options[id], in: g)
         } else {
-            item.selectMediaOption(nil, inMediaSelectionGroup: g)   // désactive les sous-titres
+            item.select(nil, in: g)   // désactive les sous-titres
         }
     }
 
