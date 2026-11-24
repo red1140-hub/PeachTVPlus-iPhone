@@ -10,12 +10,13 @@ final class SearchViewModel: ObservableObject {
     @Published private(set) var recents: [String] = []
 
     private let container: AppContainer
-    private let recentsKey = "search.recent"
+    /// Clé de persistance de l'historique (partagée avec la purge loi 25, voir `wipeRecents`).
+    static let recentsDefaultsKey = "search.recent"
     private let maxRecents = 5
 
     init(container: AppContainer) {
         self.container = container
-        recents = (UserDefaults.standard.array(forKey: recentsKey) as? [String]) ?? []
+        recents = (UserDefaults.standard.array(forKey: Self.recentsDefaultsKey) as? [String]) ?? []
     }
 
     func search() {
@@ -36,18 +37,29 @@ final class SearchViewModel: ObservableObject {
     /// Mémorise la recherche courante (à la soumission ou quand un résultat est ouvert).
     func commitRecent() {
         let q = query.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard q.count >= 2 else { return }
+        // Ne mémorise pas ce qui ressemble à une URL ou à un identifiant collé par erreur
+        // (vie privée / loi 25), et borne la longueur.
+        let lower = q.lowercased()
+        guard (2...80).contains(q.count),
+              !lower.contains("://"),
+              !lower.contains("password"),
+              !lower.contains("username") else { return }
         recents.removeAll { $0.caseInsensitiveCompare(q) == .orderedSame }
         recents.insert(q, at: 0)
         if recents.count > maxRecents { recents = Array(recents.prefix(maxRecents)) }
         persist()
     }
 
-    func apply(_ term: String) { query = term; search() }
+    /// Applique un terme récent. La recherche part via `.onChange(of: query)` — ne pas
+    /// appeler `search()` ici, sinon la requête FTS est exécutée deux fois.
+    func apply(_ term: String) { query = term }
     func removeRecent(_ term: String) { recents.removeAll { $0 == term }; persist() }
     func clearRecents() { recents = []; persist() }
 
-    private func persist() { UserDefaults.standard.set(recents, forKey: recentsKey) }
+    private func persist() { UserDefaults.standard.set(recents, forKey: Self.recentsDefaultsKey) }
+
+    /// Purge totale de l'historique de recherche (déconnexion / dernière liste retirée, loi 25).
+    static func wipeRecents() { UserDefaults.standard.removeObject(forKey: recentsDefaultsKey) }
 
     func liveRequest(_ channel: LiveChannel) -> PlaybackRequest? {
         container.activeFactory.map { PlaybackURLBuilder.live(channel, factory: $0) }
@@ -61,6 +73,7 @@ struct SearchView: View {
     @StateObject private var vm: SearchViewModel
     @State private var presentation: PlayerPresentation?
     @FocusState private var searchFocused: Bool
+    @State private var didAutoFocus = false
     private let container: AppContainer
 
     init(container: AppContainer) {
@@ -81,9 +94,14 @@ struct SearchView: View {
             }
             .navigationTitle("Recherche")
             .navigationBarTitleDisplayMode(.inline)
-            .onAppear {
-                // Focus + clavier dès l'arrivée sur l'onglet (comportement Android).
-                DispatchQueue.main.async { searchFocused = true }
+            .task {
+                // Focus + clavier une SEULE fois à la première arrivée. `onAppear` se
+                // redéclenchait au retour d'une fiche série (NavigationLink) et rouvrait
+                // le clavier alors que l'utilisateur venait de choisir un résultat.
+                guard !didAutoFocus else { return }
+                didAutoFocus = true
+                try? await Task.sleep(for: .milliseconds(300))
+                searchFocused = true
             }
             .onChange(of: vm.query) { _, _ in vm.search() }
             .fullScreenCover(item: $presentation) { p in

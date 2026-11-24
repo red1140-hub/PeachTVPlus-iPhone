@@ -56,6 +56,25 @@ struct CatalogStore {
         }
     }
 
+    /// Chaînes par identifiants (résolution des chaînes masquées sans borne de catégorie ni
+    /// limite arbitraire : une chaîne cachée au-delà du rang 5000 était sinon « perdue »).
+    /// Découpé en lots de 500 pour rester sous la limite de variables liées de SQLite.
+    /// ⚠️ La colonne de `LiveChannelRecord` est `streamId` (l'`id` du domaine en provient).
+    func liveChannels(ids: [String]) throws -> [LiveChannel] {
+        guard !ids.isEmpty else { return [] }
+        return try writer.read { db in
+            var out: [LiveChannel] = []
+            for start in stride(from: 0, to: ids.count, by: 500) {
+                let chunk = Array(ids[start..<min(start + 500, ids.count)])
+                out += try LiveChannelRecord
+                    .filter(chunk.contains(Column("streamId")))
+                    .fetchAll(db)
+                    .map(\.domain)
+            }
+            return out
+        }
+    }
+
     func movies(categoryId: String? = nil, limit: Int = 100, offset: Int = 0) throws -> [Movie] {
         try writer.read { db in
             var request = MovieRecord.all()

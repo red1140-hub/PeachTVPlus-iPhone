@@ -15,8 +15,10 @@ final class HiddenChannelsViewModel: ObservableObject {
     func reload() {
         guard let pid = playlistId else { channels = []; unknownIds = []; return }
         let hidden = (try? container.catalogStore.hiddenStreamIds(playlistId: pid)) ?? []
-        let all = (try? container.catalogStore.liveChannels(categoryId: nil, limit: 5000)) ?? []
-        let byId = Dictionary(all.map { ($0.id, $0) }, uniquingKeysWith: { a, _ in a })
+        // Résolution par ids (plus de troncature à 5000 : une chaîne cachée au-delà
+        // s'affichait « Chaîne 12345 » sans nom ni logo sur les gros catalogues).
+        let found = (try? container.catalogStore.liveChannels(ids: Array(hidden))) ?? []
+        let byId = Dictionary(found.map { ($0.id, $0) }, uniquingKeysWith: { a, _ in a })
         channels = hidden.compactMap { byId[$0] }
             .sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
         unknownIds = hidden.filter { byId[$0] == nil }.sorted()

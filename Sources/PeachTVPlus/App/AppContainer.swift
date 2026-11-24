@@ -94,7 +94,10 @@ final class AppContainer: ObservableObject {
 
         repository.removePlaylist(id)
         // Dernière liste retirée : filet de sécurité (loi 25) si des lignes subsistaient.
-        if repository.playlists.isEmpty { try? downloadStore.clearAll() }
+        if repository.playlists.isEmpty {
+            try? downloadStore.clearAll()
+            SearchViewModel.wipeRecents()   // efface l'historique de recherche local (loi 25)
+        }
         refreshVault()
     }
 }
