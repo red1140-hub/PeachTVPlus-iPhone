@@ -13,6 +13,7 @@ struct SettingsView: View {
             Form {
                 playlistsSection
                 securitySection
+                StorageSection(container: container)
                 catalogSection
                 channelsSection
                 aboutSection
