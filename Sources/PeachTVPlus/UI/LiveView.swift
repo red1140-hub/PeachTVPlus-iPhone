@@ -67,9 +67,10 @@ final class LiveViewModel: ObservableObject {
     private func reloadChannels() {
         let source: [LiveChannel]
         if selectedCategoryId == Self.favoritesCategoryId {
-            // « Favoris » : toutes les chaînes filtrées aux favoris.
-            let every = (try? container.catalogStore.liveChannels(categoryId: nil, limit: 5000)) ?? []
-            source = every.filter { favoriteIds.contains($0.id) }
+            // « Favoris » : résolution directe par ids (plus de troncature à 5000 — une
+            // chaîne favorite au-delà n'apparaissait sinon pas sur les gros catalogues).
+            source = ((try? container.catalogStore.liveChannels(ids: Array(favoriteIds))) ?? [])
+                .sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
         } else {
             let cid = (selectedCategoryId == Self.allId) ? nil : selectedCategoryId
             source = (try? container.catalogStore.liveChannels(categoryId: cid, limit: 1000)) ?? []
