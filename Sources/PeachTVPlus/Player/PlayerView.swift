@@ -37,6 +37,11 @@ struct PlayerView: View {
     var onEnded: () -> Void = {}
     /// Épisodes : boutons « Préc. / Suiv. » dans la barre du haut. nil = aucun (comportement existant).
     var episodeControls: EpisodeControls? = nil
+    /// VOD : position (s) où reprendre. Appliquée **une seule fois**, quand la durée est connue et la
+    /// lecture prête ; ignorée si elle tombe à moins de 10 s de la fin (contenu considéré comme vu).
+    var resumeAt: Double? = nil
+    /// VOD : progression (position, durée) — throttlée (~5 s) + un dernier appel à la fermeture.
+    var onProgress: ((_ positionSeconds: Int, _ durationSeconds: Int?) -> Void)? = nil
 
     @StateObject private var coordinator = PlaybackCoordinator()
     @StateObject private var volume = SystemVolumeController()
@@ -49,6 +54,8 @@ struct PlayerView: View {
     @State private var showChannelBadge = false
     @State private var showHelp = false
     @State private var endedFired = false
+    @State private var resumeApplied = false
+    @State private var lastProgressReport: Date = .distantPast
 
     // HUD volume/luminosité
     @State private var hud: HUD?
@@ -107,7 +114,10 @@ struct PlayerView: View {
             scheduleAutoHide()
             if request.isLive { showChannelBadgeTemporarily() }
         }
-        .onDisappear { coordinator.stop() }
+        .onDisappear {
+            reportProgress(force: true)
+            coordinator.stop()
+        }
         .onReceive(ticker) { _ in refreshProgress() }
         .onChange(of: coordinator.state) { _, newState in
             if newState == .ended { fireEndedOnce() }
@@ -490,8 +500,33 @@ struct PlayerView: View {
         guard !request.isLive, !isScrubbing else { return }
         if let d = coordinator.durationSeconds { duration = d }
         if let t = coordinator.currentTimeSeconds { currentTime = t }
+        applyResumeIfReady()
+        reportProgress(force: false)
         // La fin de lecture (.ended) est émise par les deux moteurs (AVPlayer via
         // AVPlayerItemDidPlayToEndTime, VLC nativement) et gérée par `.onChange(of: coordinator.state)`.
+    }
+
+    /// Reprise : un seul seek, après que l'item est prêt (état `.playing`) et la durée connue.
+    private func applyResumeIfReady() {
+        guard !resumeApplied, let target = resumeAt else { return }
+        guard duration > 0, coordinator.state == .playing else { return }
+        resumeApplied = true
+        // Presque fini (< 10 s de la fin) ou négligeable (< 5 s) → on démarre à 0.
+        guard target > 5, target < duration - 10 else { return }
+        coordinator.seek(to: target)
+        currentTime = target
+    }
+
+    /// Sauvegarde de progression VOD, throttlée à ~5 s (sauf `force` : fermeture). N'écrit pas
+    /// tant qu'une reprise demandée n'est pas appliquée (sinon on écraserait la position par 0).
+    private func reportProgress(force: Bool) {
+        guard !request.isLive, let onProgress else { return }
+        guard resumeAt == nil || resumeApplied else { return }
+        guard currentTime > 0 else { return }
+        let now = Date()
+        guard force || now.timeIntervalSince(lastProgressReport) >= 5 else { return }
+        lastProgressReport = now
+        onProgress(Int(currentTime), duration > 0 ? Int(duration) : nil)
     }
 
     private func fireEndedOnce() {

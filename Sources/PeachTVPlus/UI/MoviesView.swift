@@ -220,6 +220,7 @@ final class MovieDetailViewModel: ObservableObject {
 struct MovieDetailView: View {
     @StateObject private var vm: MovieDetailViewModel
     @State private var presentation: PlayerPresentation?
+    @State private var resumePosition: Double?
     private let container: AppContainer
 
     init(movie: Movie, container: AppContainer) {
@@ -250,7 +251,10 @@ struct MovieDetailView: View {
                 }
 
                 Button {
-                    if let r = vm.request() { presentation = PlayerPresentation(request: r) }
+                    if let r = vm.request() {
+                        resumePosition = savedResumePosition()
+                        presentation = PlayerPresentation(request: r)
+                    }
                 } label: {
                     Label("Lecture", systemImage: "play.fill").frame(maxWidth: .infinity)
                 }
@@ -275,7 +279,31 @@ struct MovieDetailView: View {
         .navigationBarTitleDisplayMode(.inline)
         .task { await vm.load() }
         .fullScreenCover(item: $presentation) { p in
-            PlayerView(request: p.request, onClose: { presentation = nil })
+            PlayerView(request: p.request,
+                       onClose: { presentation = nil },
+                       resumeAt: resumePosition,
+                       onProgress: { pos, dur in saveProgress(position: pos, duration: dur) })
         }
+    }
+
+    // MARK: Reprise de lecture
+
+    private var positionKey: String { "movie:\(vm.movie.id)" }
+
+    private func savedResumePosition() -> Double? {
+        guard let rec = try? container.catalogStore.position(contentKey: positionKey) else { return nil }
+        return Double(rec.positionSeconds)
+    }
+
+    private func saveProgress(position: Int, duration: Int?) {
+        let rec = PlaybackPositionRecord(
+            contentKey: positionKey,
+            contentType: ContentType.vod.rawValue,
+            positionSeconds: position,
+            durationSeconds: duration,
+            title: vm.movie.name,
+            posterURL: vm.movie.posterURL,
+            updatedAt: Date().timeIntervalSince1970)
+        try? container.catalogStore.savePosition(rec)
     }
 }

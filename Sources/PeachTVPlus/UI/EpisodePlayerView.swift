@@ -62,7 +62,9 @@ struct EpisodePlayerView: View {
                         hasNext: index < episodes.count - 1,
                         previous: { step(-1) },
                         next: { step(1) }
-                    )
+                    ),
+                    resumeAt: savedPosition(for: current),
+                    onProgress: { pos, dur in saveProgress(episode: current, position: pos, duration: dur) }
                 )
                 .id(current.id)                       // relance le lecteur sur le nouvel épisode
             } else {
@@ -75,6 +77,30 @@ struct EpisodePlayerView: View {
         container.activeFactory.map {
             PlaybackURLBuilder.episode(e, seriesName: seriesName, factory: $0)
         }
+    }
+
+    // MARK: Reprise de lecture
+
+    private func positionKey(_ e: Episode) -> String { "episode:\(e.id)" }
+
+    /// Lue à la construction du lecteur (recréé par `.id(current.id)` à chaque épisode).
+    private func savedPosition(for e: Episode) -> Double? {
+        guard let rec = try? container.catalogStore.position(contentKey: positionKey(e)) else { return nil }
+        return Double(rec.positionSeconds)
+    }
+
+    private func saveProgress(episode e: Episode, position: Int, duration: Int?) {
+        var label = e.title
+        if let n = e.episodeNumber { label = "S\(e.seasonNumber)E\(n) · \(e.title)" }
+        let rec = PlaybackPositionRecord(
+            contentKey: positionKey(e),
+            contentType: ContentType.series.rawValue,
+            positionSeconds: position,
+            durationSeconds: duration,
+            title: "\(seriesName) — \(label)",
+            posterURL: e.posterURL,
+            updatedAt: Date().timeIntervalSince1970)
+        try? container.catalogStore.savePosition(rec)
     }
 
     private func step(_ delta: Int) {
