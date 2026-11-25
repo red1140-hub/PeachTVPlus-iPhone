@@ -15,6 +15,7 @@ struct SettingsView: View {
                 securitySection
                 StorageSection(container: container)
                 catalogSection
+                SpeedTestSection(container: container)
                 channelsSection
                 aboutSection
                 accountSection
