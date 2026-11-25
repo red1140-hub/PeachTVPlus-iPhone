@@ -35,26 +35,39 @@ struct HomeView: View {
     }
 }
 
-/// Onglets Direct / Films / Séries maison : hauteur confortable, actif en accent néon.
+/// Onglets Direct / Films / Séries / Appareil maison : **icône + libellé**, l'onglet actif prend
+/// l'icône colorée (orange néon) et le libellé en accent, l'inactif l'icône grise (reprise de la
+/// règle Android « icône active gris → orangé »). Assets : `icon_<base>_on` / `icon_<base>_off`.
 private struct SectionTabs: View {
     @Binding var selection: Int
-    private let items = ["Direct", "Films", "Séries", "Appareil"]
+    private let tabs: [(label: String, asset: String)] = [
+        ("Direct", "direct"), ("Films", "films"), ("Séries", "series"), ("Appareil", "appareil")
+    ]
 
     var body: some View {
         HStack(spacing: 6) {
-            ForEach(items.indices, id: \.self) { i in
+            ForEach(tabs.indices, id: \.self) { i in
+                let selected = selection == i
                 Button {
                     withAnimation(.easeInOut(duration: 0.15)) { selection = i }
                 } label: {
-                    Text(items[i])
-                        .font(.subheadline.weight(.semibold))
-                        .lineLimit(1)
-                        .minimumScaleFactor(0.75)    // « Appareil » tient même à l'étroit
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 11)      // hauteur accrue
-                        .background(selection == i ? Theme.accent : Color(white: 0.15),
-                                    in: RoundedRectangle(cornerRadius: 10))
-                        .foregroundStyle(selection == i ? Color.black : Color.primary)
+                    VStack(spacing: 3) {
+                        Image("icon_\(tabs[i].asset)_\(selected ? "on" : "off")")
+                            .resizable()
+                            .scaledToFit()
+                            .frame(height: 26)
+                            .accessibilityHidden(true)
+                        Text(tabs[i].label)
+                            .font(.caption2.weight(.semibold))
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.75)    // « Appareil » tient même à l'étroit
+                            .foregroundStyle(selected ? Theme.accent : Color.secondary)
+                    }
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 7)
+                    .background(selected ? Theme.accent.opacity(0.14) : Color.clear,
+                                in: RoundedRectangle(cornerRadius: 10))
+                    .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
             }
