@@ -32,6 +32,11 @@ struct PlayerView: View {
     var channelLogoURL: String? = nil
     /// Direct : ouvre le guide horaire (rattrapage). Si nil, aucun bouton guide n'est affiché.
     var onShowGuide: (() -> Void)? = nil
+    /// VOD : appelé **une fois** quand la lecture arrive à la fin (état `.ended`, émis par les deux
+    /// moteurs). Utilisé pour l'enchaînement automatique des épisodes.
+    var onEnded: () -> Void = {}
+    /// Épisodes : boutons « Préc. / Suiv. » dans la barre du haut. nil = aucun (comportement existant).
+    var episodeControls: EpisodeControls? = nil
 
     @StateObject private var coordinator = PlaybackCoordinator()
     @StateObject private var volume = SystemVolumeController()
@@ -43,6 +48,7 @@ struct PlayerView: View {
     @State private var isScrubbing = false
     @State private var showChannelBadge = false
     @State private var showHelp = false
+    @State private var endedFired = false
 
     // HUD volume/luminosité
     @State private var hud: HUD?
@@ -103,6 +109,9 @@ struct PlayerView: View {
         }
         .onDisappear { coordinator.stop() }
         .onReceive(ticker) { _ in refreshProgress() }
+        .onChange(of: coordinator.state) { _, newState in
+            if newState == .ended { fireEndedOnce() }
+        }
         .sheet(isPresented: $showHelp) { helpSheet }
     }
 
@@ -168,6 +177,7 @@ struct PlayerView: View {
             }
             Spacer(minLength: 0)
 
+            if let episodeControls, !request.isLive { episodeButtons(episodeControls) }
             if !request.isLive { trackMenu }
             helpButton
 
@@ -180,6 +190,32 @@ struct PlayerView: View {
                 }
                 .accessibilityLabel("Guide horaire")
             }
+        }
+    }
+
+    /// Boutons épisode précédent / suivant (désactivés aux extrémités de la liste).
+    private func episodeButtons(_ c: EpisodeControls) -> some View {
+        HStack(spacing: 4) {
+            Button { c.previous() } label: {
+                Label("Préc.", systemImage: "chevron.left")
+                    .font(.footnote.weight(.semibold))
+                    .foregroundStyle(.white.opacity(c.hasPrevious ? 1 : 0.35))
+                    .frame(minHeight: 44)
+                    .padding(.horizontal, 6)
+            }
+            .disabled(!c.hasPrevious)
+            .accessibilityLabel("Épisode précédent")
+
+            Button { c.next() } label: {
+                Label("Suiv.", systemImage: "chevron.right")
+                    .labelStyle(TrailingIconLabelStyle())
+                    .font(.footnote.weight(.semibold))
+                    .foregroundStyle(.white.opacity(c.hasNext ? 1 : 0.35))
+                    .frame(minHeight: 44)
+                    .padding(.horizontal, 6)
+            }
+            .disabled(!c.hasNext)
+            .accessibilityLabel("Épisode suivant")
         }
     }
 
@@ -454,6 +490,14 @@ struct PlayerView: View {
         guard !request.isLive, !isScrubbing else { return }
         if let d = coordinator.durationSeconds { duration = d }
         if let t = coordinator.currentTimeSeconds { currentTime = t }
+        // La fin de lecture (.ended) est émise par les deux moteurs (AVPlayer via
+        // AVPlayerItemDidPlayToEndTime, VLC nativement) et gérée par `.onChange(of: coordinator.state)`.
+    }
+
+    private func fireEndedOnce() {
+        guard !request.isLive, !endedFired else { return }
+        endedFired = true
+        onEnded()
     }
 
     // MARK: - Bandeau chaîne (Direct) : logo + nom + émission en cours, ~5 s au changement

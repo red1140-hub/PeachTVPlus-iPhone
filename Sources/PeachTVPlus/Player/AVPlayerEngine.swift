@@ -29,6 +29,7 @@ final class AVPlayerEngine: VideoEngine {
     private let player = AVPlayer()
     private var itemStatusObs: NSKeyValueObservation?
     private var timeControlObs: NSKeyValueObservation?
+    private var endObserver: NSObjectProtocol?   // fin de lecture (VOD) → état `.ended`
     private var isLive = false
 
     /// Groupes de sélection chargés **de façon asynchrone** quand l'item devient lisible
@@ -43,6 +44,7 @@ final class AVPlayerEngine: VideoEngine {
     deinit {
         itemStatusObs?.invalidate()
         timeControlObs?.invalidate()
+        if let endObserver { NotificationCenter.default.removeObserver(endObserver) }
     }
 
     func prepare(url: URL, profile: BufferProfile, isLive: Bool) {
@@ -68,6 +70,7 @@ final class AVPlayerEngine: VideoEngine {
         player.pause()
         player.replaceCurrentItem(with: nil)
         itemStatusObs?.invalidate(); itemStatusObs = nil
+        if let endObserver { NotificationCenter.default.removeObserver(endObserver); self.endObserver = nil }
         audioGroup = nil; legibleGroup = nil
         setState(.idle)
     }
@@ -168,6 +171,13 @@ final class AVPlayerEngine: VideoEngine {
                 default:            break
                 }
             }
+        }
+        // Fin de lecture VOD : AVPlayer ne passe pas par `.ended` tout seul → notification dédiée.
+        if let endObserver { NotificationCenter.default.removeObserver(endObserver) }
+        endObserver = NotificationCenter.default.addObserver(
+            forName: .AVPlayerItemDidPlayToEndTime, object: item, queue: .main) { [weak self] _ in
+            guard let self, !self.isLive else { return }
+            self.setState(.ended)
         }
         timeControlObs = player.observe(\.timeControlStatus, options: [.new]) { [weak self] player, _ in
             let status = player.timeControlStatus

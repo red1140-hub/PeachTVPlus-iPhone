@@ -45,7 +45,7 @@ final class SeriesDetailViewModel: ObservableObject {
 /// et les Favoris. Les infos (résumé, genre, distribution) viennent de `get_series_info` (M1).
 struct SeriesDetailView: View {
     @StateObject private var vm: SeriesDetailViewModel
-    @State private var presentation: PlayerPresentation?
+    @State private var presentation: EpisodePresentation?
     private let container: AppContainer
 
     init(series: Series, container: AppContainer) {
@@ -69,7 +69,9 @@ struct SeriesDetailView: View {
         .navigationBarTitleDisplayMode(.inline)
         .task { await vm.load() }
         .fullScreenCover(item: $presentation) { p in
-            PlayerView(request: p.request, onClose: { presentation = nil })
+            EpisodePlayerView(episodes: p.episodes, startIndex: p.startIndex,
+                              seriesName: vm.series.name, container: container,
+                              onClose: { presentation = nil })
         }
     }
 
@@ -88,8 +90,9 @@ struct SeriesDetailView: View {
                     ForEach(season.episodes) { episode in
                         HStack(spacing: 12) {
                             Button {
-                                if let r = vm.request(for: episode) {
-                                    presentation = PlayerPresentation(request: r)
+                                let all = detail.seasons.flatMap(\.episodes)
+                                if let i = all.firstIndex(of: episode) {
+                                    presentation = EpisodePresentation(episodes: all, startIndex: i)
                                 }
                             } label: {
                                 HStack(spacing: 12) {
