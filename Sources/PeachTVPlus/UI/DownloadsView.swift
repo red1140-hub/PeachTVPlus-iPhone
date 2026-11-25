@@ -25,10 +25,15 @@ final class DownloadsViewModel: ObservableObject {
     var series: [DownloadRecord] { records.filter { $0.contentType == ContentType.series.rawValue } }
     var isEmpty: Bool { records.isEmpty }
 
-    /// Requête de lecture **hors-ligne** depuis le fichier local (téléchargement terminé).
-    func offlineRequest(_ rec: DownloadRecord) -> PlaybackRequest? {
-        guard rec.downloadStatus == .completed, let path = rec.localPath else { return nil }
-        return PlaybackRequest(url: URL(fileURLWithPath: path), title: rec.title, isLive: false)
+    /// Présentation **hors-ligne** au tap sur un titre terminé : on ouvre le lecteur sur la liste
+    /// des téléchargements **terminés** de sa section (Films ou Séries) pour permettre « Préc. /
+    /// Suiv. » et l'enchaînement, en commençant sur le titre tapé.
+    func offlinePresentation(for rec: DownloadRecord) -> OfflinePresentation? {
+        guard rec.downloadStatus == .completed, rec.localPath != nil else { return nil }
+        let section = (rec.contentType == ContentType.series.rawValue ? series : movies)
+            .filter { $0.downloadStatus == .completed && $0.localPath != nil }
+        guard let start = section.firstIndex(where: { $0.contentKey == rec.contentKey }) else { return nil }
+        return OfflinePresentation(items: section, startIndex: start)
     }
 
     private func reloadNow() {
@@ -41,9 +46,11 @@ final class DownloadsViewModel: ObservableObject {
 /// et **lecture hors-ligne** du fichier local au tap sur un élément terminé.
 struct DownloadsView: View {
     @StateObject private var vm: DownloadsViewModel
-    @State private var presentation: PlayerPresentation?
+    @State private var presentation: OfflinePresentation?
+    private let container: AppContainer
 
     init(container: AppContainer) {
+        self.container = container
         _vm = StateObject(wrappedValue: DownloadsViewModel(container: container))
     }
 
@@ -62,7 +69,8 @@ struct DownloadsView: View {
             .onAppear { vm.bind() }
             .onDisappear { vm.unbind() }
             .fullScreenCover(item: $presentation) { p in
-                PlayerView(request: p.request, onClose: { presentation = nil })
+                OfflinePlayerView(items: p.items, startIndex: p.startIndex,
+                                  container: container, onClose: { presentation = nil })
             }
         }
     }
@@ -93,7 +101,7 @@ struct DownloadsView: View {
         }
         .contentShape(Rectangle())
         .onTapGesture {
-            if let r = vm.offlineRequest(item) { presentation = PlayerPresentation(request: r) }
+            if let p = vm.offlinePresentation(for: item) { presentation = p }
         }
         .swipeActions {
             Button("Supprimer", role: .destructive) { vm.remove(item.contentKey) }
