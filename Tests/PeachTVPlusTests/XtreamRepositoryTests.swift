@@ -39,13 +39,15 @@ final class XtreamRepositoryTests: XCTestCase {
     func testLoginExpired() async {
         MockURLProtocol.respond(json: #"{"user_info":{"auth":1,"status":"Expired"}}"#)
         let repo = makeRepo()
-        XCTAssertEqual(await repo.login(credA), .expired)
+        let result = await repo.login(credA)   // hissé : `await` interdit dans l'autoclosure de XCTAssertEqual
+        XCTAssertEqual(result, .expired)
     }
 
     func testLoginHttp401IsInvalidCredentials() async {
         MockURLProtocol.respond(statusCode: 401, json: "{}")
         let repo = makeRepo()
-        XCTAssertEqual(await repo.login(credA), .invalidCredentials)
+        let result = await repo.login(credA)   // hissé : `await` interdit dans l'autoclosure de XCTAssertEqual
+        XCTAssertEqual(result, .invalidCredentials)
     }
 
     func testLoginHttp500IsNetworkError() async {
