@@ -333,7 +333,14 @@ struct LiveView: View {
             Rectangle().fill(Theme.liveNow).frame(width: 2, height: rowHeight)
                 .offset(x: nowX).allowsHitTesting(false)
             if channel.id == vm.channels.first?.id {
-                Color.clear.frame(width: 1, height: 1).offset(x: nowX).id("now")
+                // Ancre d'auto-scroll : placée à sa VRAIE position de layout (x = nowX via un
+                // espaceur), car `.offset` ne déplace que le rendu → `scrollTo` doit viser le layout.
+                HStack(spacing: 0) {
+                    Color.clear.frame(width: nowX, height: 1)
+                    Color.clear.frame(width: 1, height: 1).id("now")
+                }
+                .frame(width: canvasW, height: 1, alignment: .leading)
+                .allowsHitTesting(false)
             }
         }
         .frame(width: canvasW, height: rowHeight, alignment: .topLeading)
