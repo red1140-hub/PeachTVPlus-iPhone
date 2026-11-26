@@ -1,8 +1,8 @@
 import SwiftUI
 
-/// Helpers EPG **partagés** par le guide en feuille (`EpgGuideView`) et le panneau Direct
-/// inline (`ChannelEpgPanel`). Un seul endroit pour le formatage horaire, la détection
-/// « en cours » et la construction de la requête de rattrapage (timeshift).
+/// Helpers EPG **partagés** par le guide en feuille (`EpgGuideView`) et la feuille de détails
+/// d'une case de la grille Direct (`LiveView.programmeSheet`). Un seul endroit pour le formatage
+/// horaire, la détection « en cours » et la construction de la requête de rattrapage (timeshift).
 enum EpgFormat {
     static let hm: DateFormatter = {
         let f = DateFormatter()
