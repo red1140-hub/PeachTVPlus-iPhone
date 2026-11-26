@@ -13,6 +13,13 @@ final class DownloadManager: NSObject {
 
     static let backgroundIdentifier = "com.peachtvplus.app.downloads"
 
+    /// Préférence **« Wi-Fi uniquement »** persistée (valeur non sensible : un simple booléen, jamais
+    /// un identifiant). Défaut **ON** (comme Android). Lue au démarrage pour initialiser la politique.
+    static let wifiOnlyDefaultsKey = "downloads.wifiOnly"
+    static var persistedWifiOnly: Bool {
+        UserDefaults.standard.object(forKey: wifiOnlyDefaultsKey) as? Bool ?? true
+    }
+
     private let store: DownloadStore
     private let credentialsProvider: (_ playlistId: String) -> XtreamCredentials?
     private var queuePolicy = DownloadQueuePolicy()
@@ -24,7 +31,11 @@ final class DownloadManager: NSObject {
     }()
     private lazy var session: URLSession = {
         let config = URLSessionConfiguration.background(withIdentifier: Self.backgroundIdentifier)
-        config.allowsCellularAccess = !wifiPolicy.wifiOnly
+        // On autorise le cellulaire au niveau session : le « Wi-Fi uniquement » est appliqué par
+        // `WiFiOnlyPolicy` + `NWPathMonitor` (pause auto en cellulaire, reprise au Wi-Fi) et par les
+        // gardes de `scheduleNext`. Source de vérité unique = la politique → la bascule du réglage
+        // prend effet immédiatement, sans recréer la session background (impossible à chaud).
+        config.allowsCellularAccess = true
         config.sessionSendsLaunchEvents = true
         config.isDiscretionary = false
         return URLSession(configuration: config, delegate: self, delegateQueue: workQueue)
@@ -40,7 +51,7 @@ final class DownloadManager: NSObject {
     var backgroundCompletionHandler: (() -> Void)?
 
     init(store: DownloadStore,
-         wifiOnly: Bool = true,
+         wifiOnly: Bool = DownloadManager.persistedWifiOnly,
          credentialsProvider: @escaping (_ playlistId: String) -> XtreamCredentials?) {
         self.store = store
         self.wifiPolicy = WiFiOnlyPolicy(wifiOnly: wifiOnly)
@@ -50,6 +61,25 @@ final class DownloadManager: NSObject {
     }
 
     // MARK: - API publique
+
+    /// Réglage « Wi-Fi uniquement » courant (lecture pour l'UI des Réglages).
+    var isWifiOnly: Bool { wifiPolicy.wifiOnly }
+
+    /// Bascule le réglage « Wi-Fi uniquement » (persisté). Prise d'effet **immédiate**, via la même
+    /// logique que le moniteur réseau : activer en cellulaire → pause des transferts en cours ;
+    /// désactiver → relance la file selon le lien courant.
+    func setWifiOnly(_ on: Bool) {
+        workQueue.addOperation { [weak self] in
+            guard let self, self.wifiPolicy.wifiOnly != on else { return }
+            self.wifiPolicy.wifiOnly = on
+            UserDefaults.standard.set(on, forKey: Self.wifiOnlyDefaultsKey)
+            if self.wifiPolicy.allows(self.currentPath) {
+                self.scheduleNext()
+            } else {
+                self.pauseAllActiveForNetwork()
+            }
+        }
+    }
 
     func enqueue(contentKey: String, contentType: ContentType, playlistId: String,
                  title: String, maskedURL: String, ext: String, estimatedBytes: Int64 = 0) {
@@ -155,13 +185,18 @@ final class DownloadManager: NSObject {
         return path.isExpensive ? .cellular : .wifi
     }
 
+    /// Lien non autorisé (cellulaire en Wi-Fi-only, perte de réseau) : on coupe les transferts en
+    /// gardant leur `resumeData` et on les repasse en **`.queued`** (pas `.paused`). Sémantique :
+    /// `.paused` = suspendu par l'utilisateur (reprise manuelle) ; `.queued` = repris
+    /// **automatiquement** dès qu'un lien autorisé revient (retour Wi-Fi ou désactivation du réglage),
+    /// via `scheduleNext`.
     private func pauseAllActiveForNetwork() {
         for (key, task) in tasks {
             task.cancel(byProducingResumeData: { [weak self] data in
                 self?.workQueue.addOperation {
                     guard let self else { return }
                     try? self.store.setResumeData(contentKey: key, data)
-                    try? self.store.setStatus(contentKey: key, .paused)
+                    try? self.store.setStatus(contentKey: key, .queued)
                     self.tasks[key] = nil
                     self.publish()
                 }

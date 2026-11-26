@@ -5,8 +5,14 @@ struct SettingsView: View {
     @State private var showAddList = false
     @State private var isSyncing = false
     @State private var editing: Playlist?
+    @State private var wifiOnly: Bool
 
     private var container: AppContainer { session.container }
+
+    init(session: SessionViewModel) {
+        self.session = session
+        _wifiOnly = State(initialValue: session.container.downloadManager.isWifiOnly)
+    }
 
     var body: some View {
         NavigationStack {
@@ -14,6 +20,7 @@ struct SettingsView: View {
                 playlistsSection
                 securitySection
                 StorageSection(container: container)
+                downloadsSection
                 catalogSection
                 SpeedTestSection(container: container)
                 channelsSection
@@ -85,6 +92,17 @@ struct SettingsView: View {
             } footer: {
                 Text("HTTPS est recommandé. Le HTTP envoie vos identifiants en clair : à n'autoriser que pour un serveur de confiance.")
             }
+        }
+    }
+
+    private var downloadsSection: some View {
+        Section {
+            Toggle("Télécharger sur Wi-Fi uniquement", isOn: $wifiOnly)
+                .onChange(of: wifiOnly) { _, on in container.downloadManager.setWifiOnly(on) }
+        } header: {
+            Text("Téléchargements")
+        } footer: {
+            Text("Sur données cellulaires, les téléchargements sont suspendus et reprennent automatiquement au retour du Wi-Fi.")
         }
     }
 
