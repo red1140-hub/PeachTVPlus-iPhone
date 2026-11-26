@@ -189,6 +189,7 @@ struct PlayerView: View {
 
             if let episodeControls, !request.isLive { episodeButtons(episodeControls) }
             if !request.isLive { trackMenu }
+            airPlayButton
             helpButton
 
             if request.isLive, let onShowGuide {
@@ -279,6 +280,14 @@ struct PlayerView: View {
                 .frame(width: 44, height: 44)
         }
         .accessibilityLabel("Aide : gestes")
+    }
+
+    /// Bouton **AirPlay** natif (routes système : Apple TV, enceintes…). Visible en Direct comme en
+    /// VOD — l'AVPlayer route automatiquement dès qu'une destination est choisie (external playback).
+    private var airPlayButton: some View {
+        AirPlayButton()
+            .frame(width: 44, height: 44)
+            .accessibilityLabel("AirPlay")
     }
 
     /// Feuille d'aide : rend visibles les gestes « invisibles » du lecteur.

@@ -39,6 +39,10 @@ final class AVPlayerEngine: VideoEngine {
 
     init() {
         player.automaticallyWaitsToMinimizeStalling = true
+        // AirPlay : autorise la sortie externe (audio+vidéo) et la garde active quand un écran
+        // externe est présent. Le vrai routage se fait via le bouton AVRoutePickerView du lecteur.
+        player.allowsExternalPlayback = true
+        player.usesExternalPlaybackWhileExternalScreenIsActive = true
     }
 
     deinit {
@@ -50,6 +54,11 @@ final class AVPlayerEngine: VideoEngine {
     func prepare(url: URL, profile: BufferProfile, isLive: Bool) {
         self.isLive = isLive
         setState(.preparing)
+
+        // Session audio en lecture : routage AirPlay propre + audio en arrière-plan / écran
+        // verrouillé (mode `audio` déclaré dans project.yml). Même posture qu'au splash vidéo.
+        try? AVAudioSession.sharedInstance().setCategory(.playback, mode: .moviePlayback)
+        try? AVAudioSession.sharedInstance().setActive(true)
 
         let item = AVPlayerItem(url: url)
         item.preferredForwardBufferDuration = profile.forwardBufferSeconds(isLive: isLive)
