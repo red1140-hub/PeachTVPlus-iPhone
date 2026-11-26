@@ -157,6 +157,7 @@ struct LiveView: View {
     @State private var catchup: PlayerPresentation?        // rattrapage lancé depuis une case
     @State private var infoProg: ProgrammeInfo?            // détails d'une émission (feuille)
     @State private var pendingCatchup: PlaybackRequest?    // rattrapage à lancer APRÈS fermeture de la feuille
+    @State private var pendingPlayIndex: Int?              // « Regarder en direct » à lancer APRÈS fermeture
     @Environment(\.horizontalSizeClass) private var hSize
     private let container: AppContainer
 
@@ -190,9 +191,10 @@ struct LiveView: View {
                 PlayerView(request: p.request, onClose: { catchup = nil })
             }
             .sheet(item: $infoProg, onDismiss: {
-                // Lancé APRÈS la fermeture de la feuille : évite qu'un fullScreenCover présenté
-                // pendant la fermeture soit ignoré par SwiftUI.
-                if let r = pendingCatchup { pendingCatchup = nil; catchup = PlayerPresentation(request: r) }
+                // Lancé APRÈS la fermeture de la feuille : évite qu'un plein écran présenté
+                // pendant la fermeture soit ignoré par SwiftUI. (Un seul des deux est posé.)
+                if let i = pendingPlayIndex { pendingPlayIndex = nil; presentation = LivePresentation(index: i) }
+                else if let r = pendingCatchup { pendingCatchup = nil; catchup = PlayerPresentation(request: r) }
             }) { info in
                 programmeSheet(info)
             }
@@ -210,64 +212,88 @@ struct LiveView: View {
         }
     }
 
-    // MARK: Grille façon téléviseur — une ligne par chaîne (chaîne à gauche + grille horaire à droite)
+    // MARK: Grille façon téléviseur — chaînes à gauche, axe de temps PARTAGÉ à droite
+
+    /// Échelle : largeur par minute + hauteur fixe d'une ligne (colonne gauche et lignes droite alignées).
+    private var pxPerMinute: CGFloat { 3 }
+    private var rowHeight: CGFloat { 66 }
+
+    /// Fenêtre = la journée courante (00:00 → 24:00). Les cases sont positionnées à leur heure
+    /// réelle → axe **partagé** par toutes les chaînes, et le trait « maintenant » est vertical
+    /// et cohérent d'une ligne à l'autre.
+    private func dayStart() -> Date { Calendar.current.startOfDay(for: Date()) }
+    private func xPos(_ date: Date, from start: Date) -> CGFloat {
+        CGFloat(date.timeIntervalSince(start) / 60) * pxPerMinute
+    }
 
     private var guideGrid: some View {
-        ScrollView(.vertical) {
-            LazyVStack(spacing: 0) {
-                ForEach(vm.channels) { channel in
-                    channelRow(channel)
+        let start = dayStart()
+        let canvasW = CGFloat(24 * 60) * pxPerMinute      // 24 h
+        let nowX = xPos(Date(), from: start)
+        return ScrollViewReader { proxy in
+            ScrollView(.vertical) {
+                HStack(alignment: .top, spacing: 0) {
+                    channelColumn
                     Divider()
+                    ScrollView(.horizontal, showsIndicators: true) {
+                        LazyVStack(spacing: 0) {
+                            ForEach(vm.channels) { channel in
+                                timelineRow(channel, start: start, canvasW: canvasW, nowX: nowX)
+                                Divider().frame(width: canvasW)
+                            }
+                        }
+                    }
                 }
             }
+            .refreshable { await vm.refresh() }
+            .onAppear { proxy.scrollTo("now", anchor: .center) }   // ouvre sur l'heure actuelle
         }
-        .refreshable { await vm.refresh() }
     }
 
-    /// Ligne : la chaîne (gauche, toujours visible, **tap = la regarder**) + sa grille horaire
-    /// défilante (droite). L'EPG se charge **à la demande** quand la ligne apparaît.
-    private func channelRow(_ channel: LiveChannel) -> some View {
-        HStack(alignment: .top, spacing: 0) {
-            channelCell(channel)
-                .frame(width: columnWidth)
-                .background(Color(white: 0.06))
-            Divider()
-            timeline(channel)
-                .frame(maxWidth: .infinity, alignment: .leading)
+    // MARK: Colonne de chaînes (gauche, toujours visible — ne défile pas horizontalement)
+
+    private var channelColumn: some View {
+        LazyVStack(spacing: 0) {
+            ForEach(vm.channels) { channel in
+                channelCell(channel)
+                    .frame(width: columnWidth, height: rowHeight)
+                    .background(Color(white: 0.06))
+                Divider().frame(width: columnWidth)
+            }
         }
-        .task(id: channel.id) { await vm.loadEpg(for: channel) }
+        .frame(width: columnWidth)
     }
 
-    /// Cellule chaîne : logo + nom déroulant + badge archive ; **tap = regarder**,
-    /// appui long = favori / cacher.
+    /// Cellule chaîne compacte (hauteur fixe) : logo + nom déroulant + badge archive ;
+    /// **tap = regarder**, appui long = favori / cacher.
     private func channelCell(_ channel: LiveChannel) -> some View {
         Button {
             if let idx = vm.channels.firstIndex(of: channel) {
                 presentation = LivePresentation(index: idx)
             }
         } label: {
-            VStack(spacing: 5) {
+            HStack(spacing: 6) {
                 ChannelLogo(url: channel.iconURL)
-                    .frame(width: 46, height: 46)
+                    .frame(width: 34, height: 34)
                     .overlay(alignment: .topTrailing) {
                         if vm.isFavorite(channel) {
                             Image(systemName: "star.fill")
-                                .font(.system(size: 9)).foregroundStyle(Theme.ratingStar)
-                                .padding(2).background(.black.opacity(0.6), in: Circle())
-                                .offset(x: 4, y: -4)
+                                .font(.system(size: 8)).foregroundStyle(Theme.ratingStar)
+                                .padding(1.5).background(.black.opacity(0.6), in: Circle())
+                                .offset(x: 3, y: -3)
                         }
                     }
-                MarqueeText(text: channel.name, font: .caption)
-                    .frame(maxWidth: .infinity)
-                if channel.hasArchive {
-                    Image(systemName: "clock.arrow.circlepath")
-                        .font(.system(size: 9)).foregroundStyle(Theme.archiveBadge)
-                        .accessibilityLabel("Rattrapage disponible")
+                VStack(alignment: .leading, spacing: 2) {
+                    MarqueeText(text: channel.name, font: .caption2)
+                    if channel.hasArchive {
+                        Image(systemName: "clock.arrow.circlepath")
+                            .font(.system(size: 8)).foregroundStyle(Theme.archiveBadge)
+                            .accessibilityLabel("Rattrapage disponible")
+                    }
                 }
             }
-            .frame(maxWidth: .infinity)
-            .padding(.vertical, 10)
-            .padding(.horizontal, 4)
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
+            .padding(.horizontal, 6)
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
@@ -286,63 +312,67 @@ struct LiveView: View {
         }
     }
 
-    /// Grille horaire d'une chaîne : défilement **horizontal** de cases (une par émission),
-    /// chargée paresseusement. Tap sur une case → feuille de détails (rattrapage + IMDb).
-    @ViewBuilder private func timeline(_ channel: LiveChannel) -> some View {
-        if let progs = vm.epgByChannel[channel.id] {
-            if progs.isEmpty {
-                Text("Pas de guide horaire")
-                    .font(.caption).foregroundStyle(.secondary)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(.horizontal, 12).padding(.vertical, 24)
-            } else {
-                ScrollView(.horizontal, showsIndicators: false) {
-                    LazyHStack(spacing: 8) {
-                        ForEach(progs) { prog in
-                            programmeChip(prog, channel: channel)
-                        }
+    // MARK: Ligne horaire d'une chaîne (cases positionnées par le temps + trait « maintenant »)
+
+    /// Cases positionnées à leur heure réelle sur un canevas de largeur fixe (`canvasW`) partagé
+    /// par toutes les chaînes. EPG chargé à la demande quand la ligne apparaît. Le trait
+    /// « maintenant » est dessiné par ligne (donc continu d'une ligne à l'autre).
+    private func timelineRow(_ channel: LiveChannel, start: Date, canvasW: CGFloat, nowX: CGFloat) -> some View {
+        ZStack(alignment: .topLeading) {
+            if let progs = vm.epgByChannel[channel.id] {
+                ForEach(progs) { prog in
+                    if let f = cellFrame(prog, start: start, canvasW: canvasW) {
+                        programmeChip(prog, channel: channel, isNow: EpgFormat.isNow(prog))
+                            .frame(width: f.width, height: rowHeight - 6)
+                            .offset(x: f.x, y: 3)
                     }
-                    .padding(.horizontal, 10).padding(.vertical, 10)
                 }
+            } else {
+                ProgressView().offset(x: max(2, nowX - 10), y: rowHeight / 2 - 10)
             }
-        } else {
-            ProgressView()
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(.horizontal, 14).padding(.vertical, 24)
+            Rectangle().fill(Theme.liveNow).frame(width: 2, height: rowHeight)
+                .offset(x: nowX).allowsHitTesting(false)
+            if channel.id == vm.channels.first?.id {
+                Color.clear.frame(width: 1, height: 1).offset(x: nowX).id("now")
+            }
         }
+        .frame(width: canvasW, height: rowHeight, alignment: .topLeading)
+        .clipped()
+        .task(id: channel.id) { await vm.loadEpg(for: channel) }
     }
 
-    /// Case d'émission : plage horaire + badge « EN COURS » + titre. Tap → feuille de détails.
-    private func programmeChip(_ prog: EpgProgramme, channel: LiveChannel) -> some View {
-        let now = EpgFormat.isNow(prog)
-        return Button {
+    /// Position + largeur d'une case selon son heure (nil si hors fenêtre ou bornes inconnues).
+    private func cellFrame(_ prog: EpgProgramme, start: Date, canvasW: CGFloat) -> (x: CGFloat, width: CGFloat)? {
+        guard let s = prog.start, let e = prog.end else { return nil }
+        let x0 = max(0, xPos(s, from: start))
+        let x1 = min(canvasW, xPos(e, from: start))
+        guard x1 > x0 else { return nil }
+        return (x0, max(2, x1 - x0))
+    }
+
+    /// Case d'émission : plage horaire + titre ; surlignée si **en cours**. Tap → feuille de détails.
+    private func programmeChip(_ prog: EpgProgramme, channel: LiveChannel, isNow: Bool) -> some View {
+        Button {
             infoProg = ProgrammeInfo(prog: prog, channel: channel)
         } label: {
-            VStack(alignment: .leading, spacing: 4) {
-                HStack(spacing: 4) {
-                    Text(EpgFormat.timeRange(prog))
-                        .font(.caption2.monospacedDigit())
-                        .foregroundStyle(now ? Theme.liveNow : .secondary)
-                    if now {
-                        Text("EN COURS")
-                            .font(.system(size: 8).weight(.bold))
-                            .foregroundStyle(.black)
-                            .padding(.horizontal, 4).padding(.vertical, 1)
-                            .background(Theme.liveNow, in: Capsule())
-                    }
-                }
+            VStack(alignment: .leading, spacing: 2) {
+                Text(EpgFormat.timeRange(prog))
+                    .font(.caption2.monospacedDigit())
+                    .foregroundStyle(isNow ? Theme.liveNow : .secondary)
                 Text(prog.title.isEmpty ? "(Sans titre)" : prog.title)
                     .font(.caption).lineLimit(2)
-                    .frame(maxWidth: .infinity, alignment: .leading)
                 Spacer(minLength: 0)
             }
-            .padding(8)
-            .frame(width: 154, height: 66, alignment: .topLeading)
-            .background(Color.white.opacity(0.05), in: RoundedRectangle(cornerRadius: 8))
+            .padding(.horizontal, 6).padding(.vertical, 4)
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+            .background(isNow ? Theme.liveNow.opacity(0.18) : Color.white.opacity(0.05),
+                        in: RoundedRectangle(cornerRadius: 6))
             .overlay(
-                RoundedRectangle(cornerRadius: 8)
-                    .stroke(now ? Theme.liveNow : Color.clear, lineWidth: 1)
+                RoundedRectangle(cornerRadius: 6)
+                    .stroke(isNow ? Theme.liveNow : Color.white.opacity(0.08),
+                            lineWidth: isNow ? 1.5 : 0.5)
             )
+            .clipped()
         }
         .buttonStyle(.plain)
     }
@@ -352,6 +382,15 @@ struct LiveView: View {
     private func programmeSheet(_ info: ProgrammeInfo) -> some View {
         NavigationStack {
             List {
+                Section {
+                    Button {
+                        if let idx = vm.channels.firstIndex(of: info.channel) { pendingPlayIndex = idx }
+                        infoProg = nil
+                    } label: {
+                        Label("Regarder en direct", systemImage: "play.fill")
+                    }
+                    .tint(Theme.accent)
+                }
                 EpgProgrammeRow(prog: info.prog, channel: info.channel, container: container,
                                 onCatchup: { req in pendingCatchup = req; infoProg = nil })
             }
